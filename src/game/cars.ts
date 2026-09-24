@@ -54,7 +54,7 @@ export interface CarDef {
   accent: string;
 }
 
-const base = '/models';
+const base = `${import.meta.env.BASE_URL}models`;
 
 export const CARS: CarDef[] = [
   {
