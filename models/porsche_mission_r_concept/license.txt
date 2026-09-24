@@ -1,0 +1,11 @@
+Model Information:
+* title:	Porsche Mission R Concept
+* source:	https://sketchfab.com/3d-models/porsche-mission-r-concept-93341007191b42aabdd3365d7acd8a39
+* author:	VTX (https://sketchfab.com/VTX_car)
+
+Model License:
+* license type:	CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)
+* requirements:	Author must be credited. No commercial use. Modified versions must have the same license.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "Porsche Mission R Concept" (https://sketchfab.com/3d-models/porsche-mission-r-concept-93341007191b42aabdd3365d7acd8a39) by VTX (https://sketchfab.com/VTX_car) licensed under CC-BY-NC-SA-4.0 (http://creativecommons.org/licenses/by-nc-sa/4.0/)

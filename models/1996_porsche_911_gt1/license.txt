@@ -1,0 +1,11 @@
+Model Information:
+* title:	1996 Porsche 911 GT1
+* source:	https://sketchfab.com/3d-models/1996-porsche-911-gt1-9930af5fcd30467a84247d15d75896a5
+* author:	Dave Love SketchFab (https://sketchfab.com/Tyler_Dave)
+
+Model License:
+* license type:	CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
+* requirements:	Author must be credited. Commercial use is allowed.
+
+If you use this 3D model in your project be sure to copy paste this credit wherever you share it:
+This work is based on "1996 Porsche 911 GT1" (https://sketchfab.com/3d-models/1996-porsche-911-gt1-9930af5fcd30467a84247d15d75896a5) by Dave Love SketchFab (https://sketchfab.com/Tyler_Dave) licensed under CC-BY-4.0 (http://creativecommons.org/licenses/by/4.0/)
