@@ -18,6 +18,7 @@ function copyModels(): Plugin {
 }
 
 export default defineConfig({
+  base: '/apex-horizon/', // 部署到 GitHub Pages
   plugins: [react(), copyModels()],
   server: { port: 5173, host: true },
   build: { chunkSizeWarningLimit: 4000 },
