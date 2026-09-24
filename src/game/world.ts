@@ -225,7 +225,17 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const an = asphaltNormal();
     an.repeat.set(6, 6);
     const mat = keep(
-      new THREE.MeshStandardMaterial({ map: at, roughnessMap: ar, roughness: night ? 0.75 : 0.88, normalMap: an, normalScale: new THREE.Vector2(0.4, 0.4), metalness: 0.0, envMapIntensity: 0.6 }),
+      new THREE.MeshPhysicalMaterial({
+        map: at,
+        roughnessMap: ar,
+        roughness: night ? 0.58 : 0.8,
+        normalMap: an,
+        normalScale: new THREE.Vector2(0.55, 0.55),
+        metalness: 0.04,
+        clearcoat: night ? 0.32 : 0.18,
+        clearcoatRoughness: 0.22,
+        envMapIntensity: night ? 0.9 : 0.72,
+      }),
     );
     const m = new THREE.Mesh(toGeom(r), mat);
     m.receiveShadow = true;

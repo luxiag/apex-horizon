@@ -115,7 +115,6 @@ export class RaceSession {
       const s = -12 - idx * 9;
       const lat = idx % 2 === 0 ? 3.2 : -3.2;
       v.placeAt((s + track.length) % track.length, lat);
-      v.pos.y += 0.05;
       let ai: AIDriver | null = null;
       if (g.ai) {
         const prof = { ...AI_NAMES[idx % AI_NAMES.length] };
@@ -193,7 +192,18 @@ export class RaceSession {
         this.phaseTime = 0;
         this.raceTime = 0;
         hud.countdown = 0;
-        this.racers.forEach((r) => (r.lapStart = 0));
+        this.racers.forEach((r) => {
+          r.lapStart = 0;
+          // 发车瞬间清除倒计时阶段留下的垂直残差，所有车辆从赛道表面起步。
+          const v = r.vehicle;
+          const p = tr.project(v.pos.x, v.pos.z, v.proj.index, v.proj);
+          v.proj = p;
+          v.pos.y = p.height;
+          v.vel.y = 0;
+          v.grounded = true;
+          v.airborne = false;
+          v.heave = 0;
+        });
       }
     }
     if (this.phase === 'racing' || this.phase === 'finished') this.raceTime += dt;
@@ -206,8 +216,15 @@ export class RaceSession {
       if (frozen) {
         input = emptyInput();
         const v = r.vehicle;
+        // 倒计时阶段锁定在发车位，避免重力积分或碰撞修正积累垂直速度。
+        const start = tr.project(v.pos.x, v.pos.z, v.proj.index, v.proj);
+        v.proj = start;
+        v.pos.y = start.height;
         v.vel.set(0, 0, 0);
         v.yawRate = 0;
+        v.grounded = true;
+        v.airborne = false;
+        v.heave = 0;
         if (r.isPlayer) {
           input.throttle = playerInput.throttle; // 可以原地轰油门
           const target = 1000 + playerInput.throttle * (v.def.tune.redline * 0.85 - 1000);

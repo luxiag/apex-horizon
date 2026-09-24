@@ -86,6 +86,8 @@ export const CARS: CarDef[] = [
     tag: 'S1 · 920',
     url: `${base}/mclaren_600lt/scene.gltf`,
     length: 4.6,
+    // GLTF 顶层矩阵变换后车头朝 -Z，统一到车辆物理使用的 +Z 方向
+    flip: true,
     // GLTFLoader 会去掉节点名中的 "."，wheel_lf.child_122 -> wheel_lfchild_122
     wheelMatch: /wheel_(lf|lr|rf|rr)\.?child/,
     hubMatch: /hub_(lf|lr|rf|rr)/,

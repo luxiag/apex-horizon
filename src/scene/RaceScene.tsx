@@ -222,6 +222,7 @@ export function RaceScene() {
       root.position.set(v.pos.x, v.pos.y - v.heave, v.pos.z);
       tmp.e.set(v.pitch, v.yaw, 0, 'YXZ');
       root.quaternion.setFromEuler(tmp.e);
+      // 让车身的俯仰/侧倾叠加在模型原始修正朝向上，避免翻转模型时丢失车头方向
       inst.body.rotation.set(v.bodyPitch, inst.body.rotation.y, v.bodyRoll);
       const wheelRot = v.wheelSpin;
       for (const k of ['FL', 'FR', 'RL', 'RR'] as const) {
@@ -230,7 +231,7 @@ export function RaceScene() {
         if (k[0] === 'F') w.steer.rotation.y = v.steerAngle;
         w.spin.rotation.x = k[0] === 'R' ? wheelRot + v.rearSpinBoost * state.clock.elapsedTime * 0.05 : wheelRot;
       }
-      setCarLights(inst, v.braking || r.input.handbrake ? 1 : 0, tod.night ? 1 : 0.25, tod.night ? 1 : 0);
+      setCarLights(inst, v.braking || r.input.handbrake ? 1 : 0, tod.night ? 1 : 0.28, tod.night ? 1 : 0);
 
       // 距离裁剪：远处不生成特效
       const d2 = (v.pos.x - camPos.x) ** 2 + (v.pos.z - camPos.z) ** 2;

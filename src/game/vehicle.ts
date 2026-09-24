@@ -154,7 +154,6 @@ export class Vehicle {
     // ---------- 赛道投影 & 地面 ----------
     this.proj = tr.project(this.pos.x, this.pos.z, this.proj.index, this.proj);
     const lat = Math.abs(this.proj.lateral);
-    const groundH = this.proj.height;
     this.onGrass = lat > tr.halfWidth + 0.9;
     this.onCurb = !this.onGrass && lat > tr.halfWidth - 0.2 && Math.abs(tr.curv[this.proj.index]) > 0.004;
 
@@ -327,19 +326,23 @@ export class Vehicle {
     // ---------- 垂直 ----------
     this.proj = tr.project(this.pos.x, this.pos.z, this.proj.index, this.proj);
     const gh = this.proj.height + (this.onGrass ? -0.02 : 0);
-    this.vel.y -= G * dt;
-    this.pos.y += this.vel.y * dt;
-    if (this.pos.y <= gh) {
-      const groundVy = (gh - groundH) / dt;
-      if (!this.grounded && this.vel.y < -3) {
-        this.bodyPitchV -= this.vel.y * 0.05;
-        this.heave = Math.min(0.12, -this.vel.y * 0.015);
-      }
+    // 接地车辆直接跟随赛道表面。旧逻辑把相邻采样点的高度差转成垂直速度，
+    // 在起步坡度或高速下坡时会把车辆错误地弹到空中，911 的长车身尤其明显。
+    if (this.grounded) {
       this.pos.y = gh;
-      this.vel.y = Math.min(Math.max(this.vel.y, groundVy), groundVy + 0.5);
-      this.grounded = true;
-    } else if (this.pos.y > gh + 0.25) {
-      this.grounded = false;
+      this.vel.y = 0;
+    } else {
+      this.vel.y -= G * dt;
+      this.pos.y += this.vel.y * dt;
+      if (this.pos.y <= gh) {
+        if (this.vel.y < -3) {
+          this.bodyPitchV -= this.vel.y * 0.05;
+          this.heave = Math.min(0.12, -this.vel.y * 0.015);
+        }
+        this.pos.y = gh;
+        this.vel.y = 0;
+        this.grounded = true;
+      }
     }
     this.airborne = !this.grounded;
 
