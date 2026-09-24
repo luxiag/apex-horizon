@@ -5,8 +5,8 @@ import { ContactShadows, Environment, Sparkles, useGLTF } from '@react-three/dre
 import * as THREE from 'three'
 import './styles.css'
 
-type Telemetry = { speed: number; boost: number; drift: boolean; lap: number; lapTime: number; best: number; gear: number; rpm: number; active: boolean; countdown: number; driftScore: number; score: number; finished: boolean; driftChain: number }
-type GameState = Telemetry & { angle: number; angularVelocity: number; lateral: number; distance: number; lapStarted: number; lastSplit: number; driftChain: number }
+type Telemetry = { speed: number; boost: number; drift: boolean; lap: number; lapTime: number; best: number; gear: number; rpm: number; active: boolean; countdown: number; driftScore: number; score: number; finished: boolean; driftChain: number; rank: number }
+type GameState = Telemetry & { angle: number; angularVelocity: number; lateral: number; distance: number; lapStarted: number; lastSplit: number; driftChain: number; raceProgress: number }
 type InputKey = 'forward' | 'reverse' | 'left' | 'right' | 'drift' | 'boost'
 
 const track = { a: 33, b: 51, width: 13, centerZ: -9 }
@@ -17,7 +17,17 @@ const inputCodes: Record<string, InputKey> = {
 }
 const input = new Set<InputKey>()
 const readBest = () => { try { return Number(localStorage.getItem('midnight-best') ?? 0) } catch { return 0 } }
-const initialGame = (): GameState => ({ speed: 0, boost: 100, drift: false, lap: 1, lapTime: 0, best: readBest(), gear: 1, rpm: 900, active: false, countdown: 3, driftScore: 0, score: 0, finished: false, driftChain: 1, angle: Math.PI / 2, angularVelocity: 0, lateral: 0, distance: 0, lapStarted: 0, lastSplit: 0 })
+const initialGame = (): GameState => ({ speed: 0, boost: 100, drift: false, lap: 1, lapTime: 0, best: readBest(), gear: 1, rpm: 900, active: false, countdown: 3, driftScore: 0, score: 0, finished: false, driftChain: 1, rank: 4, raceProgress: 0, angle: Math.PI / 2, angularVelocity: 0, lateral: 0, distance: 0, lapStarted: 0, lastSplit: 0 })
+
+const opponentProgress = [0.015, 0.017, 0.019]
+const resetOpponents = () => { opponentProgress[0] = 0.015; opponentProgress[1] = 0.017; opponentProgress[2] = 0.019 }
+function routePoint(progress: number, lane: number, target = new THREE.Vector3()) {
+  const angle = progress * Math.PI * 2
+  const radius = 1 + lane / track.b
+  target.set(Math.sin(angle) * track.a * radius, 0.42, track.centerZ + Math.cos(angle) * track.b * radius)
+  return target
+}
+function routeHeading(progress: number) { return Math.atan2(Math.cos(progress * Math.PI * 2) * track.a, -Math.sin(progress * Math.PI * 2) * track.b) }
 
 function ellipseBandGeometry(inner: number, outer: number) {
   const geometry = new THREE.BufferGeometry()
@@ -139,6 +149,8 @@ function Car({ game, onUpdate, running }: { game: React.MutableRefObject<GameSta
     } else s.driftChain = THREE.MathUtils.damp(s.driftChain, 1, 3, dt)
 
     const progress = (Math.atan2(dx / track.a, dz / track.b) + Math.PI * 2) % (Math.PI * 2)
+    s.raceProgress = progress / (Math.PI * 2) + (s.lap - 1)
+    s.rank = 1 + opponentProgress.filter((opponent) => opponent > s.raceProgress).length
     if (progress < 0.035 && s.distance > 250 && performance.now() - s.lastSplit > 7000) {
       if (s.best === 0 || s.lapTime < s.best) {
         s.best = s.lapTime
@@ -254,12 +266,50 @@ function Track() {
   </group>
 }
 
+function OpponentModel({ material }: { material: THREE.MeshStandardMaterial }) {
+  const { scene } = useGLTF('/assets/kenney/race-future.glb')
+  const model = useMemo(() => {
+    const source = scene.clone(true)
+    source.traverse((node) => { if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true; node.material = material } })
+    return source
+  }, [material, scene])
+  return <primitive object={model} position={[0, 0.06, 0]} rotation={[0, Math.PI, 0]} scale={1.8} />
+}
+
+function OpponentCars({ game, running }: { game: React.MutableRefObject<GameState>; running: React.MutableRefObject<boolean> }) {
+  const roots = useRef<Array<THREE.Group | null>>([])
+  const positions = useRef(opponentProgress.map(() => new THREE.Vector3()))
+  const models = useMemo(() => opponentProgress.map((_, index) => {
+    const material = new THREE.MeshStandardMaterial({ color: ['#d9d5c8', '#4c9ab0', '#b45039'][index], metalness: 0.6, roughness: 0.3 })
+    return material
+  }), [])
+  useFrame((_, rawDelta) => {
+    if (!running.current) return
+    const dt = Math.min(rawDelta, 0.04)
+    if (game.current.countdown > 0 || game.current.finished) return
+    opponentProgress.forEach((_, index) => {
+      opponentProgress[index] += dt * [0.052, 0.048, 0.045][index]
+      const progress = opponentProgress[index] % 1
+      routePoint(progress, [-3.2, 0, 3.2][index], positions.current[index])
+      const root = roots.current[index]
+      if (root) {
+        root.position.copy(positions.current[index])
+        root.rotation.y = routeHeading(progress)
+      }
+    })
+  })
+  return <>{opponentProgress.map((_, index) => <group key={index} ref={(node) => { roots.current[index] = node }}>
+    <OpponentModel material={models[index]} />
+    <pointLight color={index === 0 ? '#8ce3f2' : '#ff513b'} intensity={1.8} distance={4} />
+  </group>)}</>
+}
+
 function Scene({ game, onUpdate, running }: { game: React.MutableRefObject<GameState>; onUpdate: (state: GameState) => void; running: React.MutableRefObject<boolean> }) {
   return <>
     <color attach="background" args={['#080b0d']} /><fog attach="fog" args={['#080b0d', 68, 220]} />
     <ambientLight intensity={0.44} /><hemisphereLight args={['#b1c0d1', '#29312c', 0.64]} />
     <directionalLight position={[22, 36, 12]} intensity={2.1} castShadow shadow-mapSize-width={2048} shadow-mapSize-height={2048} />
-    <Track /><Car game={game} onUpdate={onUpdate} running={running} />
+    <Track /><OpponentCars game={game} running={running} /><Car game={game} onUpdate={onUpdate} running={running} />
     <ContactShadows position={[0, -0.1, track.centerZ]} opacity={0.35} scale={120} blur={3} far={16} />
     <Environment preset="night" />
   </>
@@ -329,7 +379,7 @@ function App() {
     const now = performance.now()
     if (now - lastHud.current < 80) return
     lastHud.current = now
-    setHud({ speed: s.speed, boost: s.boost, drift: s.drift, lap: s.lap, lapTime: s.lapTime, best: s.best, gear: s.gear, rpm: s.rpm, active: s.active, countdown: s.countdown, driftScore: s.driftScore, score: s.score, finished: s.finished, driftChain: s.driftChain })
+    setHud({ speed: s.speed, boost: s.boost, drift: s.drift, lap: s.lap, lapTime: s.lapTime, best: s.best, gear: s.gear, rpm: s.rpm, active: s.active, countdown: s.countdown, driftScore: s.driftScore, score: s.score, finished: s.finished, driftChain: s.driftChain, rank: s.rank })
     const sounds = audio.current
     if (sounds) {
       const speedRatio = Math.min(1, Math.abs(s.speed) / 82)
@@ -374,7 +424,8 @@ function App() {
     <section className="touch-controls"><button {...hold('left')}>◀</button><button {...hold('right')}>▶</button><button {...hold('drift')}>DRIFT</button><button {...hold('reverse')}>BRAKE</button><button {...hold('forward')}>GAS</button><button {...hold('boost')}>N₂O</button></section>
     {started && hud.countdown > 0 && <div className="countdown"><small>GET READY</small><strong>{Math.ceil(hud.countdown)}</strong></div>}
     {started && <div className="drift-score"><small>DRIFT SCORE</small><strong>{hud.driftScore.toLocaleString()}</strong>{hud.drift && <span>× {hud.driftChain.toFixed(1)}</span>}</div>}
-    {hud.finished && <div className="finish-overlay"><small>HAKONE NIGHT RUN / COMPLETE</small><strong>FINISH<br /><i>THE RUN.</i></strong><div className="finish-stats"><span>FINAL TIME<b>{formatTime(hud.lapTime)}</b></span><span>BEST LAP<b>{formatTime(hud.best)}</b></span><span>DRIFT SCORE<b>{hud.score.toLocaleString()}</b></span></div><button onClick={() => { game.current = initialGame(); setHud(game.current); running.current = true; setStarted(true) }}>RACE AGAIN <b>↗</b></button></div>}
+    <div className="rank-badge"><small>POSITION</small><strong>{hud.rank}<i>/ 04</i></strong></div>
+    {hud.finished && <div className="finish-overlay"><small>HAKONE NIGHT RUN / COMPLETE</small><strong>FINISH<br /><i>THE RUN.</i></strong><div className="finish-stats"><span>FINAL TIME<b>{formatTime(hud.lapTime)}</b></span><span>BEST LAP<b>{formatTime(hud.best)}</b></span><span>DRIFT SCORE<b>{hud.score.toLocaleString()}</b></span></div><button onClick={() => { resetOpponents(); game.current = initialGame(); setHud(game.current); running.current = true; setStarted(true) }}>RACE AGAIN <b>↗</b></button></div>}
     {started && !running.current && !hud.finished && <button className="pause-overlay" onClick={togglePause}><span>SESSION PAUSED</span><strong>RESUME</strong><small>PRESS ENTER</small></button>}
     {!started && <button className="start-overlay" onClick={() => { running.current = true; setStarted(true) }}><span>ENGINE READY</span><strong>START<br /><i>YOUR RUN</i></strong><small>PRESS ENTER OR TAP TO BEGIN <b>↗</b></small></button>}
     <div className="grain" />
