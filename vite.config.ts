@@ -10,8 +10,8 @@ function copyModels(): Plugin {
     name: 'copy-models',
     apply: 'build',
     closeBundle() {
-      const src = path.resolve(__dirname, 'models');
-      const dst = path.resolve(__dirname, 'dist/models');
+      const src = path.resolve(import.meta.dirname, 'models');
+      const dst = path.resolve(import.meta.dirname, 'dist/models');
       fs.cpSync(src, dst, { recursive: true });
     },
   };

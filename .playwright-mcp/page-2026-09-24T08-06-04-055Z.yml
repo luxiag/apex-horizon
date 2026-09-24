@@ -1,0 +1,96 @@
+- generic [ref=e2]:
+  - generic:
+    - generic:
+      - generic:
+        - generic:
+          - generic: "6"
+          - generic:
+            - generic: TH
+            - generic: /6
+        - generic:
+          - generic: LAP · 圈数
+          - generic:
+            - text: "1"
+            - generic: /3
+      - generic:
+        - generic:
+          - generic: TIME
+          - generic: 0:00.000
+        - generic:
+          - generic: LAP
+          - generic: 0:00.000
+        - generic:
+          - generic: BEST
+          - generic: "--:--.---"
+        - generic: 追尾视角 · C 切换
+      - generic:
+        - generic:
+          - generic: "1"
+          - generic: K. Tanaka
+          - generic: +1.8s
+        - generic:
+          - generic: "2"
+          - generic: M. Rossi
+          - generic: +1.4s
+        - generic:
+          - generic: "3"
+          - generic: L. Weber
+          - generic: +1.1s
+        - generic:
+          - generic: "4"
+          - generic: A. Silva
+          - generic: +0.7s
+        - generic:
+          - generic: "5"
+          - generic: J. Carter
+          - generic: +0.4s
+        - generic:
+          - generic: "6"
+          - generic: 你
+      - generic:
+        - img:
+          - generic: "0"
+          - generic: "1"
+          - generic: "2"
+          - generic: "3"
+          - generic: "4"
+          - generic: "5"
+          - generic: "6"
+          - generic: "7"
+          - generic: "8"
+          - generic: "9"
+          - generic: x1000 RPM
+        - generic:
+          - generic: "2"
+          - generic: KM/H
+          - generic: R
+      - generic: N₂O
+      - generic:
+        - generic: DRIFT · 漂移
+        - generic: "0"
+        - generic: x1.0
+      - generic:
+        - generic: 落日海岸
+        - generic: SUNSET COASTLINE GP · 3 LAPS
+      - generic:
+        - generic:
+          - generic: W
+          - generic: A
+          - generic: S
+          - generic: D
+          - text: 驾驶
+        - generic:
+          - generic: Space
+          - text: 手刹漂移
+        - generic:
+          - generic: Shift
+          - text: 氮气
+        - generic:
+          - generic: C
+          - text: 视角
+        - generic:
+          - generic: R
+          - text: 复位
+        - generic:
+          - generic: Esc
+          - text: 暂停
