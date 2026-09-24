@@ -51,8 +51,8 @@ function ellipseBandGeometry(inner: number, outer: number) {
   return geometry
 }
 
-function LicensedCarModel() {
-  const { scene } = useGLTF('/assets/kenney/race-future.glb')
+function AssetModel({ path, scale = 1, position = [0, 0, 0], rotation = [0, 0, 0] }: { path: string; scale?: number; position?: [number, number, number]; rotation?: [number, number, number] }) {
+  const { scene } = useGLTF(path)
   const model = useMemo(() => {
     const clone = scene.clone(true)
     clone.traverse((node) => {
@@ -63,10 +63,11 @@ function LicensedCarModel() {
     })
     return clone
   }, [scene])
-  return <primitive object={model} position={[0, 0.06, 0]} rotation={[0, Math.PI, 0]} scale={2.65} />
+  return <primitive object={model} position={position} rotation={rotation} scale={scale} />
 }
 
-useGLTF.preload('/assets/kenney/race-future.glb')
+const playerCarAsset = '/assets/racing-kit/raceCarRed.glb'
+useGLTF.preload(playerCarAsset)
 
 function formatTime(time: number) {
   const seconds = Math.floor(time / 1000)
@@ -196,7 +197,7 @@ function Car({ game, onUpdate, running }: { game: React.MutableRefObject<GameSta
 
   return (
     <group ref={root} position={[0, 0.42, track.centerZ + track.b]}>
-      <LicensedCarModel />
+      <AssetModel path={playerCarAsset} position={[0, 0.06, 0]} rotation={[0, Math.PI, 0]} scale={2.2} />
       <mesh position={[0, 0.62, -2.2]}><boxGeometry args={[1.8, 0.13, 0.08]} /><meshBasicMaterial color="#ff392f" toneMapped={false} /></mesh>
       <mesh position={[0, 0.62, 2.2]}><boxGeometry args={[1.5, 0.11, 0.08]} /><meshBasicMaterial color="#fff1d0" toneMapped={false} /></mesh>
       <mesh position={[0, 0.7, 1.75]}><boxGeometry args={[1.85, 0.12, 0.12]} /><meshStandardMaterial color="#161b1d" metalness={0.7} roughness={0.24} /></mesh>
@@ -218,7 +219,7 @@ function Track() {
   const curve = new THREE.CatmullRomCurve3(curvePoints, true)
   const laneMarks = Array.from({ length: 48 }, (_, i) => curve.getPoint(i / 48))
   const lightPoints = Array.from({ length: 12 }, (_, i) => curve.getPoint((i + 0.5) / 12))
-  const signPoints = Array.from({ length: 6 }, (_, i) => curve.getPoint((i + 0.18) / 6))
+  const signPoints = Array.from({ length: 4 }, (_, i) => curve.getPoint((i + 0.22) / 4))
   const innerBarrier = curvePoints.map((p) => new THREE.Vector3(p.x * 0.7, 0.26, track.centerZ + (p.z - track.centerZ) * 0.7))
   const outerBarrier = curvePoints.map((p) => new THREE.Vector3(p.x * 1.34, 0.26, track.centerZ + (p.z - track.centerZ) * 1.34))
   const startLine = Array.from({ length: 9 }, (_, i) => <mesh key={i} position={[-5.2 + i * 1.3, 0.035, track.centerZ + track.b - 0.2]} rotation={[-Math.PI / 2, 0, 0]}><planeGeometry args={[1.3, 2.4]} /><meshBasicMaterial color={i % 2 ? '#f1efe7' : '#161a1b'} /></mesh>)
@@ -226,35 +227,20 @@ function Track() {
   return <group>
     <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, -0.18, track.centerZ]} receiveShadow><planeGeometry args={[360, 360]} /><meshStandardMaterial color="#111713" roughness={1} /></mesh>
     <mesh geometry={ellipseBandGeometry(1 - track.width / (2 * track.b), 1 + track.width / (2 * track.b))} position={[0, 0.005, 0]} receiveShadow><meshStandardMaterial color="#24272a" roughness={0.95} side={THREE.DoubleSide} /></mesh>
+    <mesh geometry={ellipseBandGeometry(1 - track.width / (2 * track.b) + 0.08, 1 + track.width / (2 * track.b) - 0.08)} position={[0, 0.008, 0]}><meshStandardMaterial color="#2a3033" roughness={0.28} metalness={0.12} transparent opacity={0.19} side={THREE.DoubleSide} /></mesh>
     <mesh geometry={ellipseBandGeometry(1 - track.width / (2 * track.b) - 0.035, 1 - track.width / (2 * track.b))} position={[0, -0.075, 0]}><meshStandardMaterial color="#d5d2c7" roughness={0.84} side={THREE.DoubleSide} /></mesh>
+    <mesh geometry={ellipseBandGeometry(1 + track.width / (2 * track.b), 1 + track.width / (2 * track.b) + 0.035)} position={[0, -0.07, 0]}><meshStandardMaterial color="#d5d2c7" roughness={0.84} side={THREE.DoubleSide} /></mesh>
     <group>{startLine}<mesh position={[0, 4.15, track.centerZ + track.b - 0.2]}><boxGeometry args={[13, 0.42, 0.38]} /><meshStandardMaterial color="#202628" metalness={0.65} roughness={0.34} /></mesh>{[-5.7, 5.7].map((x) => <mesh key={x} position={[x, 2, track.centerZ + track.b - 0.2]}><cylinderGeometry args={[0.12, 0.16, 4.1, 8]} /><meshStandardMaterial color="#333a3a" metalness={0.5} /></mesh>)}</group>
     {laneMarks.map((p, i) => <mesh key={i} position={[p.x, 0.018, p.z]} rotation={[0, Math.atan2(p.x, -(p.z - track.centerZ)), 0]}><boxGeometry args={[0.16, 0.018, 2.4]} /><meshBasicMaterial color="#a6a69d" /></mesh>)}
-    <mesh><tubeGeometry args={[new THREE.CatmullRomCurve3(innerBarrier, true), 260, 0.29, 6, true]} /><meshStandardMaterial color="#77817e" metalness={0.58} roughness={0.39} /></mesh>
-    <mesh><tubeGeometry args={[new THREE.CatmullRomCurve3(outerBarrier, true), 260, 0.33, 6, true]} /><meshStandardMaterial color="#77817e" metalness={0.58} roughness={0.39} /></mesh>
-    {lightPoints.map((p, i) => <group key={i} position={[p.x * 1.53, 0, track.centerZ + (p.z - track.centerZ) * 1.53]}>
-      <mesh position={[0, 2.8, 0]}><cylinderGeometry args={[0.06, 0.06, 5.6, 8]} /><meshStandardMaterial color="#30383a" metalness={0.8} /></mesh>
-      <mesh position={[0, 5.55, 0]}><boxGeometry args={[1.15, 0.18, 0.32]} /><meshBasicMaterial color="#ef5738" toneMapped={false} /></mesh>
-      {i % 3 === 0 && <pointLight position={[0, 5.25, 0]} color="#ff5f40" intensity={9} distance={8} decay={2} />}
-    </group>)}
-    {signPoints.map((p, i) => <group key={`sign-${i}`} position={[p.x * 1.44, 0, track.centerZ + (p.z - track.centerZ) * 1.44]} rotation={[0, Math.atan2(p.x, -(p.z - track.centerZ)), 0]}>
-      <mesh position={[0, 2.5, 0]}><boxGeometry args={[8.8, 2.1, 0.22]} /><meshStandardMaterial color="#151c1e" metalness={0.48} roughness={0.48} /></mesh>
-      <mesh position={[0, 2.5, 0.13]}><boxGeometry args={[8.35, 0.035, 0.03]} /><meshBasicMaterial color={i % 2 ? '#78d9e5' : '#ee7050'} toneMapped={false} /></mesh>
-      <mesh position={[0, 2.58, 0.16]}><planeGeometry args={[7.6, 1.35]} /><meshBasicMaterial color="#d4dbd6" /></mesh>
-      <mesh position={[0, 2.58, 0.19]}><planeGeometry args={[6.9, 0.84]} /><meshBasicMaterial color="#161b1c" /></mesh>
-      {[-3.5, 3.5].map((x) => <mesh key={x} position={[x, 1.15, 0]}><cylinderGeometry args={[0.11, 0.15, 2.3, 8]} /><meshStandardMaterial color="#41494a" metalness={0.55} /></mesh>)}
-    </group>)}
-    {[-1, 1].map((side) => Array.from({ length: 24 }, (_, i) => {
-      const t = i / 24
-      const x = Math.sin(t * Math.PI * 2) * 99 + side * 19
-      const z = track.centerZ + Math.cos(t * Math.PI * 2) * 123
-      const height = 12 + (i % 5) * 2.2
-      const size = 5.5 + (i % 3) * 1.4
-      return <group key={`${side}-${i}`} position={[x, 0, z]}>
-        <mesh position={[0, height / 2, 0]}><cylinderGeometry args={[0.1, 0.16, height, 5]} /><meshStandardMaterial color="#18201d" /></mesh>
-        <mesh position={[0, height + size * 0.35, 0]}><coneGeometry args={[size, size * 1.45, 7]} /><meshStandardMaterial color={i % 3 === 0 ? '#263a34' : '#1c302a'} roughness={1} /></mesh>
-        <mesh position={[0, height + size, 0]}><coneGeometry args={[size * 0.72, size * 1.3, 7]} /><meshStandardMaterial color="#22372f" roughness={1} /></mesh>
-      </group>
-    }))}
+    <AssetModel path="/assets/racing-kit/overheadLights.glb" position={[0, 0, track.centerZ + track.b - 0.2]} scale={4.4} />
+    <mesh><tubeGeometry args={[new THREE.CatmullRomCurve3(innerBarrier, true), 260, 0.2, 6, true]} /><meshStandardMaterial color="#3d4748" metalness={0.78} roughness={0.27} /></mesh>
+    <mesh><tubeGeometry args={[new THREE.CatmullRomCurve3(outerBarrier, true), 260, 0.22, 6, true]} /><meshStandardMaterial color="#3d4748" metalness={0.78} roughness={0.27} /></mesh>
+    {curvePoints.filter((_, i) => i % 5 === 0).map((p, i) => <group key={`barrier-${i}`} position={[p.x * 1.34, 0, track.centerZ + (p.z - track.centerZ) * 1.34]} rotation={[0, Math.atan2(p.x, -(p.z - track.centerZ)), 0]}><AssetModel path={i % 2 ? '/assets/racing-kit/barrierWhite.glb' : '/assets/racing-kit/barrierRed.glb'} scale={1.35} /></group>)}
+    {lightPoints.map((p, i) => <group key={i} position={[p.x * 1.53, 0, track.centerZ + (p.z - track.centerZ) * 1.53]} rotation={[0, Math.atan2(p.x, -(p.z - track.centerZ)), 0]}><AssetModel path={i % 2 ? '/assets/racing-kit/lightPostModern.glb' : '/assets/racing-kit/lightPostLarge.glb'} scale={3.2} /><pointLight color="#ffc28c" intensity={i % 3 === 0 ? 7 : 0} distance={10} decay={2} /></group>)}
+    {signPoints.map((p, i) => <group key={`sign-${i}`} position={[p.x * 1.46, 0, track.centerZ + (p.z - track.centerZ) * 1.46]} rotation={[0, Math.atan2(p.x, -(p.z - track.centerZ)), 0]}><AssetModel path={i % 2 ? '/assets/racing-kit/bannerTowerGreen.glb' : '/assets/racing-kit/bannerTowerRed.glb'} scale={4.6} /></group>)}
+    <group position={[-56, 0, track.centerZ - 2]} rotation={[0, 0.18, 0]}><AssetModel path="/assets/racing-kit/grandStandCovered.glb" scale={5.5} /></group>
+    <group position={[56, 0, track.centerZ + 8]} rotation={[0, -0.18, 0]}><AssetModel path="/assets/racing-kit/grandStand.glb" scale={5.5} /></group>
+    {[-1, 1].flatMap((side) => Array.from({ length: 8 }, (_, i) => { const a = (i / 8) * Math.PI * 2; return <group key={`tree-${side}-${i}`} position={[Math.sin(a) * 90 + side * 24, 0, track.centerZ + Math.cos(a) * 112]}><AssetModel path={i % 2 ? '/assets/racing-kit/treeSmall.glb' : '/assets/racing-kit/treeLarge.glb'} scale={3.8 + (i % 3) * 0.65} /></group> }))}
     {Array.from({ length: 14 }, (_, i) => {
       const angle = (i / 14) * Math.PI * 2
       const x = Math.cos(angle) * 154
@@ -266,23 +252,19 @@ function Track() {
   </group>
 }
 
-function OpponentModel({ material }: { material: THREE.MeshStandardMaterial }) {
-  const { scene } = useGLTF('/assets/kenney/race-future.glb')
+function OpponentModel({ path }: { path: string }) {
+  const { scene } = useGLTF(path)
   const model = useMemo(() => {
     const source = scene.clone(true)
-    source.traverse((node) => { if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true; node.material = material } })
+    source.traverse((node) => { if (node instanceof THREE.Mesh) { node.castShadow = true; node.receiveShadow = true } })
     return source
-  }, [material, scene])
+  }, [scene])
   return <primitive object={model} position={[0, 0.06, 0]} rotation={[0, Math.PI, 0]} scale={1.8} />
 }
 
 function OpponentCars({ game, running }: { game: React.MutableRefObject<GameState>; running: React.MutableRefObject<boolean> }) {
   const roots = useRef<Array<THREE.Group | null>>([])
   const positions = useRef(opponentProgress.map(() => new THREE.Vector3()))
-  const models = useMemo(() => opponentProgress.map((_, index) => {
-    const material = new THREE.MeshStandardMaterial({ color: ['#d9d5c8', '#4c9ab0', '#b45039'][index], metalness: 0.6, roughness: 0.3 })
-    return material
-  }), [])
   useFrame((_, rawDelta) => {
     if (!running.current) return
     const dt = Math.min(rawDelta, 0.04)
@@ -298,8 +280,9 @@ function OpponentCars({ game, running }: { game: React.MutableRefObject<GameStat
       }
     })
   })
+  const assets = ['/assets/racing-kit/raceCarWhite.glb', '/assets/racing-kit/raceCarGreen.glb', '/assets/racing-kit/raceCarOrange.glb']
   return <>{opponentProgress.map((_, index) => <group key={index} ref={(node) => { roots.current[index] = node }}>
-    <OpponentModel material={models[index]} />
+    <OpponentModel path={assets[index]} />
     <pointLight color={index === 0 ? '#8ce3f2' : '#ff513b'} intensity={1.8} distance={4} />
   </group>)}</>
 }
