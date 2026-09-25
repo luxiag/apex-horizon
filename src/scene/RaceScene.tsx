@@ -223,7 +223,7 @@ export function RaceScene() {
       tmp.e.set(v.pitch, v.yaw, 0, 'YXZ');
       root.quaternion.setFromEuler(tmp.e);
       // 让车身的俯仰/侧倾叠加在模型原始修正朝向上，避免翻转模型时丢失车头方向
-      inst.body.rotation.set(v.bodyPitch, inst.body.rotation.y, v.bodyRoll);
+      inst.body.rotation.set(v.bodyPitch, inst.flipY, v.bodyRoll);
       const wheelRot = v.wheelSpin;
       for (const k of ['FL', 'FR', 'RL', 'RR'] as const) {
         const w = inst.wheels[k];

@@ -25,6 +25,7 @@ export interface CarInstance {
   brakeMats: THREE.MeshStandardMaterial[];
   headMats: THREE.MeshStandardMaterial[];
   info: PreparedCar;
+  flipY: number;
 }
 
 const cache = new Map<string, PreparedCar>();
@@ -273,7 +274,7 @@ export function instantiateCar(def: CarDef, prep: PreparedCar, opts: { paint?: s
     const steer = root.getObjectByName(`wheel_${k}`) as THREE.Group | undefined;
     wheels[k] = steer ? { steer, spin: steer.getObjectByName('spin') as THREE.Group } : null;
   });
-  return { root, body, wheels, paint, brakeMats, headMats, info: prep };
+  return { root, body, wheels, paint, brakeMats, headMats, info: prep, flipY: def.flip ? Math.PI : 0 };
 }
 
 /** 设置车灯亮度：brake 0~1，head 0~1 */
