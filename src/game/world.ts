@@ -1,13 +1,13 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import type { Track } from './track';
-import { fbm, ridged, smoothstep, mulberry, noise2 } from './noise';
+import { getBiome } from './biome';
+import { fbm, smoothstep, mulberry } from './noise';
 import {
   asphaltTextures,
   asphaltRoughness,
   asphaltNormal,
   curbTexture,
-  grassTexture,
   checkerTexture,
   barrierTexture,
   fenceTexture,
@@ -31,25 +31,6 @@ export interface World {
   dispose: () => void;
 }
 
-const isDesertTrack = (id: string) => id === 'desert';
-
-function naturalHeightCoast(x: number, z: number) {
-  const hills = (fbm(x * 0.0022 + 3.1, z * 0.0022 + 7.7, 5) - 0.42) * 70;
-  const r = Math.hypot(x + 10, (z + 180) * 1.15);
-  const mountain = ridged(x * 0.0011 + 11, z * 0.0011 - 3, 5) * 330 * smoothstep(700, 1700, r);
-  const coastLine = 110 + (noise2(x * 0.004, 3.3) - 0.5) * 140;
-  const coast = smoothstep(coastLine, coastLine + 260, z);
-  const land = hills + mountain;
-  return land * (1 - coast) + -16 * coast;
-}
-
-function naturalHeightDesert(x: number, z: number) {
-  const dunes = (fbm(x * 0.0018 + 7.3, z * 0.0018 - 4.5, 5) - 0.4) * 55;
-  const ridge = ridged(x * 0.0008 + 2, z * 0.0008 + 9, 5) * 180 * smoothstep(800, 2000, Math.hypot(x, z));
-  const plateau = smoothstep(0.42, 0.55, fbm(x * 0.001 + 15, z * 0.001 + 20, 4)) * 40;
-  return dunes + ridge + plateau;
-}
-
 export function buildWorld(track: Track, opts: { night: boolean; quality: 'high' | 'medium' }): World {
   const group = new THREE.Group();
   group.name = 'world';
@@ -59,6 +40,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
   const hw = track.halfWidth;
   const wall = track.wallOffset;
   const night = opts.night;
+  const biome = getBiome(track.def.biome);
 
   // 赛道包围盒
   let minX = Infinity,
@@ -73,8 +55,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
   }
   const PAD = 190;
 
-  const desert = isDesertTrack(track.def.id);
-  const naturalHeight = desert ? naturalHeightDesert : naturalHeightCoast;
+  const naturalHeight = biome.naturalHeight;
 
   const groundHeight = (x: number, z: number) => {
     const nat = naturalHeight(x, z);
@@ -135,16 +116,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     g.computeVertexNormals();
     const nrm = g.attributes.normal as THREE.BufferAttribute;
     const col = new Float32Array(W * H * 3);
-    const cGrassA = new THREE.Color(night ? '#2c4a2a' : '#5f7d34');
-    const cGrassB = new THREE.Color(night ? '#3b5530' : '#8a8f3e');
-    const cForest = new THREE.Color('#2f4a24');
-    const cRock = new THREE.Color('#7a6f63');
-    const cSand = new THREE.Color('#d8c29a');
-    const cSnow = new THREE.Color('#eef2f6');
-    const cDesertA = new THREE.Color(night ? '#4a3d28' : '#d4b87a');
-    const cDesertB = new THREE.Color(night ? '#5a4c30' : '#c4a060');
-    const cDesertRock = new THREE.Color('#8b6e4e');
-    const cDesertDune = new THREE.Color(night ? '#3d3220' : '#e8d0a0');
+    const colors = biome.terrainColor(night);
     const cTmp = new THREE.Color();
     for (let k = 0; k < W * H; k++) {
       const x = pos[k * 3];
@@ -152,29 +124,16 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
       const z = pos[k * 3 + 2];
       const ny = nrm.getY(k);
       const v = fbm(x * 0.01, z * 0.01, 3);
-      if (desert) {
-        cTmp.copy(cDesertA).lerp(cDesertB, smoothstep(0.3, 0.7, v));
-        cTmp.lerp(cDesertDune, smoothstep(0.6, 0.85, fbm(x * 0.003 + 20, z * 0.003 + 15, 3)) * 0.6);
-        cTmp.lerp(cDesertRock, smoothstep(0.88, 0.7, ny));
-        cTmp.lerp(cDesertRock, smoothstep(50, 120, y) * 0.7);
-        cTmp.lerp(cRock, smoothstep(140, 200, y) * 0.5);
-      } else {
-        cTmp.copy(cGrassA).lerp(cGrassB, smoothstep(0.35, 0.7, v));
-        cTmp.lerp(cForest, smoothstep(0.55, 0.8, fbm(x * 0.004 + 9, z * 0.004, 3)) * 0.7);
-        cTmp.lerp(cRock, smoothstep(0.88, 0.7, ny));
-        cTmp.lerp(cRock, smoothstep(60, 140, y) * 0.8);
-        cTmp.lerp(cSnow, smoothstep(190, 250, y + v * 40) * smoothstep(0.6, 0.8, ny));
-        cTmp.lerp(cSand, smoothstep(2.2, 0.4, y) * smoothstep(40, 110, z));
-      }
+      biome.paintTerrainVertex(cTmp, colors, x, y, z, ny, v);
       col[k * 3] = cTmp.r;
       col[k * 3 + 1] = cTmp.g;
       col[k * 3 + 2] = cTmp.b;
     }
     g.setAttribute('color', new THREE.BufferAttribute(col, 3));
     keep(g);
-    const gt = desert ? asphaltRoughness() : grassTexture();
+    const gt = biome.terrainTexture();
     gt.repeat.set(1, 1);
-    const mat = keep(new THREE.MeshStandardMaterial({ vertexColors: true, map: gt, roughness: desert ? 1 : 0.95, metalness: 0 }));
+    const mat = keep(new THREE.MeshStandardMaterial({ vertexColors: true, map: gt, roughness: biome.terrainRoughness, metalness: 0 }));
     const mesh = new THREE.Mesh(g, mat);
     mesh.receiveShadow = true;
     mesh.name = 'terrain';
@@ -186,19 +145,19 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
   wn.repeat.set(90, 90);
   const waterMat = keep(
     new THREE.MeshPhysicalMaterial({
-      color: night ? (desert ? '#1a1408' : '#0a1a2a') : (desert ? '#8b7355' : '#1d5673'),
-      roughness: desert ? 0.95 : 0.06,
-      metalness: desert ? 0 : 0.1,
-      normalMap: desert ? null : wn,
-      normalScale: desert ? new THREE.Vector2(0, 0) : new THREE.Vector2(0.35, 0.35),
-      envMapIntensity: desert ? 0.3 : 1.3,
-      clearcoat: desert ? 0 : 0.6,
-      clearcoatRoughness: desert ? 1 : 0.1,
+      color: biome.waterColor(night),
+      roughness: biome.waterRoughness,
+      metalness: biome.waterMetalness,
+      normalMap: biome.waterNormalMap ? wn : null,
+      normalScale: biome.waterNormalMap ? new THREE.Vector2(0.35, 0.35) : new THREE.Vector2(0, 0),
+      envMapIntensity: biome.waterEnvIntensity,
+      clearcoat: biome.waterClearcoat,
+      clearcoatRoughness: biome.waterClearcoat > 0 ? 0.1 : 1,
     }),
   );
   const water = new THREE.Mesh(keep(new THREE.PlaneGeometry(9000, 9000)), waterMat);
   water.rotation.x = -Math.PI / 2;
-  water.position.y = desert ? -28 : WATER_LEVEL;
+  water.position.y = biome.waterLevel;
   water.name = 'water';
   group.add(water);
 
@@ -271,9 +230,9 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const r = ribbon();
     strip(r, wall + 7, hw - 0.1, -0.06, -0.01, 9, 0, n, 0, (wall + 7 - hw) / 9);
     strip(r, -hw + 0.1, -wall - 7, -0.01, -0.06, 9, 0, n, 0, (wall + 7 - hw) / 9);
-    const gt = desert ? asphaltRoughness() : grassTexture();
+    const gt = biome.shoulderTexture();
     gt.needsUpdate = true;
-    const mat = keep(new THREE.MeshStandardMaterial({ color: desert ? (night ? '#3d3220' : '#c4a060') : (night ? '#2c4a2a' : '#627f37'), map: gt, roughness: 0.95 }));
+    const mat = keep(new THREE.MeshStandardMaterial({ color: biome.shoulderColor(night), map: gt, roughness: 0.95 }));
     const m = new THREE.Mesh(toGeom(r), mat);
     m.receiveShadow = true;
     group.add(m);
@@ -282,7 +241,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     strip(r2, hw + 2.6, hw + 0.9, 0.0, 0.0, 6, 0, n, 0, 0.3);
     strip(r2, -hw - 0.9, -hw - 2.6, 0.0, 0.0, 6, 0, n, 0, 0.3);
     const ar = asphaltRoughness();
-    const mat2 = keep(new THREE.MeshStandardMaterial({ color: desert ? '#b89e6e' : '#8d8274', map: ar, roughness: 1 }));
+    const mat2 = keep(new THREE.MeshStandardMaterial({ color: biome.gravelColor, map: ar, roughness: 1 }));
     const m2 = new THREE.Mesh(toGeom(r2), mat2);
     m2.receiveShadow = true;
     group.add(m2);
@@ -325,7 +284,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
         const z = track.pz[i] + leftZ(i) * off;
         const y = track.py[i];
         r.pos.push(x, y - 0.4, z, x, y + 1.05, z);
-        // 右侧护墙从赛道内看是反向的，翻转 u 让文字正向
         const v = (cumulative(k) / 16) * side;
         r.uv.push(v, 0, v, 1);
         count++;
@@ -370,7 +328,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const ft = fenceTexture();
     ft.repeat.set(1, 1);
     const fg = toGeom(f);
-    // 纵向 uv：高度 2.55m -> 1 个重复
     const fmat = keep(new THREE.MeshStandardMaterial({ map: ft, alphaTest: 0.4, transparent: false, side: THREE.DoubleSide, metalness: 0.6, roughness: 0.4, color: '#c8ccd2' }));
     const fm = new THREE.Mesh(fg, fmat);
     group.add(fm);
@@ -460,7 +417,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     seats.castShadow = true;
     seats.receiveShadow = true;
     gs.add(seats);
-    // 顶棚
     const roofGeo = keep(new THREE.BoxGeometry(len + 2, 0.3, rows * 0.9 + 3));
     const roof = new THREE.Mesh(roofGeo, keep(new THREE.MeshStandardMaterial({ color: '#e8e8ea', roughness: 0.4, metalness: 0.3 })));
     roof.position.set(0, rows * 0.5 + 4.6, 1.2 + (rows * 0.9) / 2);
@@ -473,7 +429,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
       c.position.set(x, (rows * 0.5 + 4.6) / 2, 1.5 + rows * 0.9);
       gs.add(c);
     }
-    // 观众
     const person = keep(new THREE.BoxGeometry(0.46, 0.85, 0.32));
     person.translate(0, 0.42, 0);
     const perRow = Math.floor(len / 0.62);
@@ -494,16 +449,13 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     crowd.count = c;
     crowd.castShadow = false;
     gs.add(crowd);
-    // 顶棚广告
-    const bannerText = desert ? 'APEX RUSH  ·  SCORCHED DUNES GRAND PRIX' : 'APEX RUSH  ·  SUNSET COASTLINE GRAND PRIX';
-    const bannerBg = desert ? '#b8721a' : '#c1121f';
     const bannerTex = textTexture(
       [
-        { text: bannerText, color: '#ffffff', font: 'italic 900 70px Arial Black, Arial', y: 64 },
+        { text: biome.bannerText, color: '#ffffff', font: 'italic 900 70px Arial Black, Arial', y: 64 },
       ],
       2048,
       128,
-      bannerBg,
+      biome.bannerBg,
     );
     keep(bannerTex);
     const banner = new THREE.Mesh(keep(new THREE.PlaneGeometry(len, 1.6)), keep(new THREE.MeshStandardMaterial({ map: bannerTex, emissive: '#ffffff', emissiveMap: bannerTex, emissiveIntensity: night ? 0.8 : 0.15 })));
@@ -514,8 +466,15 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
   }
 
   const L = track.length;
-  group.add(placeSide(grandstand(130, 12, 3), 60, -(wall + 1.2)));
-  group.add(placeSide(grandstand(110, 10, 5), L - 110, -(wall + 1.2)));
+  const gsDefs = track.def.grandstands ?? [
+    { s: 60, lateral: -1, len: 130, rows: 12, seed: 3 },
+    { s: 0.9, lateral: -1, len: 110, rows: 10, seed: 5 },
+  ];
+  for (const gsd of gsDefs) {
+    const gsS = gsd.s < 1 ? gsd.s * L : gsd.s;
+    const gsLat = gsd.lateral * (wall + 1.2);
+    group.add(placeSide(grandstand(gsd.len, gsd.rows, gsd.seed), gsS, gsLat));
+  }
 
   // ---- 维修区大楼 ----
   {
@@ -535,7 +494,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     glass.position.set(0, 7.2, 1.99);
     glass.rotation.y = Math.PI;
     pit.add(glass);
-    // 车库门
     const doorMat = keep(new THREE.MeshStandardMaterial({ color: '#1c2129', emissive: '#ffe2b0', emissiveIntensity: night ? 0.35 : 0.0, roughness: 0.6 }));
     const doorGeo = keep(new THREE.PlaneGeometry(7, 4.2));
     for (let x = -len / 2 + 8; x < len / 2 - 4; x += 10) {
@@ -553,7 +511,10 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const signPole = new THREE.Mesh(keep(new THREE.BoxGeometry(40.5, 8, 0.5)), darkMetal);
     signPole.position.set(0, 13.5, 3.3);
     pit.add(signPole);
-    group.add(placeSide(pit, 20, wall + 5));
+    const pitDef = track.def.pit ?? { s: 20, lateral: 1 };
+    const pitS = pitDef.s < 1 ? pitDef.s * L : pitDef.s;
+    const pitLat = pitDef.lateral * (wall + 5);
+    group.add(placeSide(pit, pitS, pitLat));
   }
 
   // ---- 起跑龙门架 + 起跑灯 ----
@@ -581,7 +542,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
       if (dir < 0) led.rotation.y = Math.PI;
       g.add(led);
     }
-    // 起跑灯：5 组，面向发车格（-Z 方向）
     const lightGeo = keep(new THREE.SphereGeometry(0.32, 16, 12));
     const housing = keep(new THREE.BoxGeometry(0.9, 1.9, 0.5));
     for (let i = 0; i < 5; i++) {
@@ -599,7 +559,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     }
     const p = track.pointAt(0, 0);
     g.position.set(p.x, p.y, p.z);
-    // local X 为横跨赛道方向（左侧为正）；local Z 沿赛道前进方向
     g.rotation.y = track.headingAt(0);
     group.add(g);
   }
@@ -689,7 +648,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const legGeo = keep(new THREE.BoxGeometry(0.4, 6, 0.4));
     const boardGeo = keep(new THREE.PlaneGeometry(14, 7));
     const mats = [tA, tB].map((t) => keep(new THREE.MeshStandardMaterial({ map: t, emissive: '#ffffff', emissiveMap: t, emissiveIntensity: night ? 0.9 : 0.12, roughness: 0.5 })));
-    // 找到弯道入口，放在弯道外侧面向来车
     let placed = 0;
     let lastS = -1e9;
     for (let i = 0; i < n && placed < 10; i++) {
@@ -697,7 +655,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
       const s = i * track.step;
       if (Math.abs(c) > 0.008 && s - lastS > 220) {
         const sb = s - 40;
-        const side = c > 0 ? -1 : 1; // 弯道外侧
+        const side = c > 0 ? -1 : 1;
         const g = new THREE.Group();
         for (const x of [-5, 5]) {
           const leg = new THREE.Mesh(legGeo, darkMetal);
@@ -713,7 +671,6 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
         b.castShadow = true;
         const p = track.pointAt(sb, side * (wall + 12));
         g.position.set(p.x, groundHeight(p.x, p.z) - 0.5, p.z);
-        // 面向来车方向（-切线）并稍微朝向赛道
         g.rotation.y = track.headingAt(sb) + Math.PI + side * 0.5;
         group.add(g);
         placed++;
@@ -722,202 +679,63 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     }
   }
 
-  // ======================= 树木/仙人掌 =======================
+  // ======================= 植被 =======================
   {
+    const veg = biome.vegetation(night);
     const rnd = mulberry(1234);
-    function paint(g: THREE.BufferGeometry, color: string) {
-      const c = new THREE.Color(color);
-      const cnt = g.attributes.position.count;
-      const arr = new Float32Array(cnt * 3);
-      for (let i = 0; i < cnt; i++) {
-        arr[i * 3] = c.r;
-        arr[i * 3 + 1] = c.g;
-        arr[i * 3 + 2] = c.b;
-      }
-      g.setAttribute('color', new THREE.BufferAttribute(arr, 3));
-    }
     const treeMat = keep(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.9, flatShading: true }));
-
-    if (desert) {
-      const cactusA = (() => {
-        const parts: THREE.BufferGeometry[] = [];
-        const trunk = new THREE.CylinderGeometry(0.3, 0.35, 4, 8);
-        trunk.translate(0, 2, 0);
-        paint(trunk, '#2d6b3a');
-        parts.push(trunk);
-        const arm1 = new THREE.CylinderGeometry(0.2, 0.22, 1.8, 8);
-        arm1.translate(0, 0.9, 0);
-        const arm1b = arm1.clone();
-        arm1.rotateZ(Math.PI / 2);
-        arm1.translate(0.6, 2.8, 0.18);
-        arm1b.rotateZ(-Math.PI / 2);
-        arm1b.translate(-0.6, 3.2, -0.18);
-        paint(arm1, '#357a42');
-        paint(arm1b, '#2d6b3a');
-        parts.push(arm1, arm1b);
-        const cap = new THREE.SphereGeometry(0.32, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
-        cap.translate(0, 4, 0);
-        paint(cap, '#357a42');
-        parts.push(cap);
-        const merged = mergeGeometries(parts)!;
-        parts.forEach((p) => p.dispose());
-        return keep(merged);
-      })();
-      const cactusB = (() => {
-        const parts: THREE.BufferGeometry[] = [];
-        const trunk = new THREE.CylinderGeometry(0.22, 0.26, 2.5, 8);
-        trunk.translate(0, 1.25, 0);
-        paint(trunk, '#3a7844');
-        parts.push(trunk);
-        const arms: THREE.BufferGeometry[] = [];
-        for (let side = -1; side <= 1; side += 2) {
-          const arm = new THREE.CylinderGeometry(0.14, 0.16, 1.2, 6);
-          arm.translate(0, 0.6, 0);
-          arm.rotateZ(side * Math.PI / 2.5);
-          arm.translate(side * 0.5, 1.6, 0);
-          paint(arm, '#3a7844');
-          arms.push(arm);
-        }
-        parts.push(...arms);
-        const cap = new THREE.SphereGeometry(0.24, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2);
-        cap.translate(0, 2.5, 0);
-        paint(cap, '#428a50');
-        parts.push(cap);
-        const merged = mergeGeometries(parts)!;
-        parts.forEach((p) => p.dispose());
-        return keep(merged);
-      })();
-      const target = opts.quality === 'high' ? 1800 : 900;
-      const listA: THREE.Matrix4[] = [];
-      const listB: THREE.Matrix4[] = [];
-      const colsA: THREE.Color[] = [];
-      const colsB: THREE.Color[] = [];
-      const m = new THREE.Matrix4();
-      const q2 = new THREE.Quaternion();
-      const up = new THREE.Vector3(0, 1, 0);
-      let tries = 0;
-      while (listA.length + listB.length < target && tries < target * 14) {
-        tries++;
-        const x = (rnd() * 2 - 1) * 1800;
-        const z = -1800 + rnd() * 2200;
-        const dens = fbm(x * 0.005 + 40, z * 0.005 - 13, 4);
-        if (rnd() > smoothstep(0.32, 0.62, dens) * 0.5) continue;
-        if (x > minX - PAD && x < maxX + PAD && z > minZ - PAD && z < maxZ + PAD) {
-          const d = track.distanceInfo(x, z);
-          if (d.dist < wall + 14) continue;
-        }
-        const y = groundHeight(x, z);
-        if (y < -2 || y > 160) continue;
-        const s = 0.7 + rnd() * 1.1;
-        q2.setFromAxisAngle(up, rnd() * Math.PI * 2);
-        m.compose(new THREE.Vector3(x, y - 0.1, z), q2, new THREE.Vector3(s, s * (0.8 + rnd() * 0.5), s));
-        const tint = new THREE.Color().setHSL(0.28 + rnd() * 0.08, 0.3 + rnd() * 0.25, 0.3 + rnd() * 0.2);
-        if (rnd() < 0.6) {
-          listA.push(m.clone());
-          colsA.push(tint);
-        } else {
-          listB.push(m.clone());
-          colsB.push(tint);
-        }
+    const target = opts.quality === 'high' ? veg.density.high : veg.density.medium;
+    const lists = veg.geos.map(() => [] as THREE.Matrix4[]);
+    const colorLists = veg.geos.map(() => [] as THREE.Color[]);
+    const m = new THREE.Matrix4();
+    const q2 = new THREE.Quaternion();
+    const up = new THREE.Vector3(0, 1, 0);
+    let tries = 0;
+    const totalTarget = target;
+    const totalCount = () => lists.reduce((s, l) => s + l.length, 0);
+    while (totalCount() < totalTarget && tries < totalTarget * 14) {
+      tries++;
+      const x = (rnd() * 2 - 1) * veg.scatterRange;
+      const z = veg.scatterZBase + rnd() * veg.scatterZRange;
+      const dens = fbm(x * veg.densityNoiseScale + veg.densityNoiseOffset, z * veg.densityNoiseScale - 13, 4);
+      if (rnd() > smoothstep(0.32 + veg.densityThreshold, 0.62 + veg.densityThreshold, dens)) continue;
+      if (x > minX - PAD && x < maxX + PAD && z > minZ - PAD && z < maxZ + PAD) {
+        const d = track.distanceInfo(x, z);
+        if (d.dist < wall + 14) continue;
       }
-      const mk = (geo: THREE.BufferGeometry, list: THREE.Matrix4[], cols: THREE.Color[]) => {
-        const im = new THREE.InstancedMesh(geo, treeMat, list.length);
-        list.forEach((mm, i) => {
-          im.setMatrixAt(i, mm);
-          im.setColorAt(i, cols[i]);
-        });
-        im.castShadow = true;
-        im.receiveShadow = true;
-        im.computeBoundingSphere();
-        return im;
-      };
-      group.add(mk(cactusA, listA, colsA), mk(cactusB, listB, colsB));
-    } else {
-      const pine = (() => {
-        const parts: THREE.BufferGeometry[] = [];
-        const trunk = new THREE.CylinderGeometry(0.18, 0.28, 2.4, 6);
-        trunk.translate(0, 1.2, 0);
-        paint(trunk, '#5a3d2b');
-        parts.push(trunk);
-        for (let k = 0; k < 4; k++) {
-          const r = 2.3 - k * 0.45;
-          const cone = new THREE.ConeGeometry(r, 3.2 - k * 0.3, 8);
-          cone.translate(0, 2.6 + k * 1.55, 0);
-          paint(cone, k % 2 ? '#2f5d3a' : '#284f31');
-          parts.push(cone);
-        }
-        const merged = mergeGeometries(parts)!;
-        parts.forEach((p) => p.dispose());
-        return keep(merged);
-      })();
-      const broad = (() => {
-        const trunk = new THREE.CylinderGeometry(0.2, 0.32, 2.8, 6);
-        trunk.translate(0, 1.4, 0);
-        paint(trunk, '#5b4331');
-        const crown = new THREE.IcosahedronGeometry(2.4, 1);
-        const p = crown.attributes.position;
-        for (let i = 0; i < p.count; i++) {
-          const x = p.getX(i);
-          const y = p.getY(i);
-          const z = p.getZ(i);
-          const f = 0.8 + noise2(x * 1.3 + 5, z * 1.3 + y) * 0.45;
-          p.setXYZ(i, x * f, y * f * 0.85, z * f);
-        }
-        crown.translate(0, 4.2, 0);
-        const crownNI = crown.toNonIndexed();
-        paint(crownNI, '#4d6e2e');
-        const trunkNI = trunk.toNonIndexed();
-        paint(trunkNI, '#5b4331');
-        const merged = mergeGeometries([trunkNI, crownNI])!;
-        merged.computeVertexNormals();
-        return keep(merged);
-      })();
-      const target = opts.quality === 'high' ? 5200 : 2600;
-      const pines: THREE.Matrix4[] = [];
-      const broads: THREE.Matrix4[] = [];
-      const colorsP: THREE.Color[] = [];
-      const colorsB: THREE.Color[] = [];
-      const m = new THREE.Matrix4();
-      const q2 = new THREE.Quaternion();
-      const up = new THREE.Vector3(0, 1, 0);
-      let tries = 0;
-      while (pines.length + broads.length < target && tries < target * 12) {
-        tries++;
-        const x = (rnd() * 2 - 1) * 1500;
-        const z = -1500 + rnd() * 1700;
-        const dens = fbm(x * 0.006 + 40, z * 0.006 - 13, 4);
-        if (rnd() > smoothstep(0.38, 0.62, dens)) continue;
-        if (x > minX - PAD && x < maxX + PAD && z > minZ - PAD && z < maxZ + PAD) {
-          const d = track.distanceInfo(x, z);
-          if (d.dist < wall + 14) continue;
-        }
-        if (Math.abs(x) < 240 && z > -60 && z < 90) continue;
-        const y = groundHeight(x, z);
-        if (y < 1.5 || y > 170) continue;
-        const s = 0.8 + rnd() * 0.9;
-        q2.setFromAxisAngle(up, rnd() * Math.PI * 2);
-        m.compose(new THREE.Vector3(x, y - 0.2, z), q2, new THREE.Vector3(s, s * (0.85 + rnd() * 0.4), s));
-        const tint = new THREE.Color().setHSL(0.22 + rnd() * 0.12, 0.35 + rnd() * 0.2, 0.62 + rnd() * 0.3);
-        if (y > 40 || rnd() < 0.55) {
-          pines.push(m.clone());
-          colorsP.push(tint);
-        } else {
-          broads.push(m.clone());
-          colorsB.push(tint);
-        }
-      }
-      const mk = (geo: THREE.BufferGeometry, list: THREE.Matrix4[], cols: THREE.Color[]) => {
-        const im = new THREE.InstancedMesh(geo, treeMat, list.length);
-        list.forEach((mm, i) => {
-          im.setMatrixAt(i, mm);
-          im.setColorAt(i, cols[i]);
-        });
-        im.castShadow = true;
-        im.receiveShadow = true;
-        im.computeBoundingSphere();
-        return im;
-      };
-      group.add(mk(pine, pines, colorsP), mk(broad, broads, colorsB));
+      if (veg.placementSkip && veg.placementSkip(x, z)) continue;
+      const y = groundHeight(x, z);
+      if (y < veg.heightRange[0] || y > veg.heightRange[1]) continue;
+      const s = 0.7 + rnd() * 1.1;
+      q2.setFromAxisAngle(up, rnd() * Math.PI * 2);
+      m.compose(new THREE.Vector3(x, y + veg.groundOffset, z), q2, new THREE.Vector3(s, s * (0.8 + rnd() * 0.5), s));
+      const tint = new THREE.Color().setHSL(
+        veg.colorHue + rnd() * veg.colorHueVar,
+        veg.colorSat + rnd() * veg.colorSatVar,
+        veg.colorLgt + rnd() * veg.colorLgtVar,
+      );
+      const idx = rnd() < 0.6 ? 0 : Math.min(1, veg.geos.length - 1);
+      lists[idx].push(m.clone());
+      colorLists[idx].push(tint);
+    }
+    const mk = (geoIdx: number) => {
+      const geo = veg.geos[geoIdx];
+      const list = lists[geoIdx];
+      const cols = colorLists[geoIdx];
+      if (list.length === 0) return null;
+      const im = new THREE.InstancedMesh(geo, treeMat, list.length);
+      list.forEach((mm, i) => {
+        im.setMatrixAt(i, mm);
+        im.setColorAt(i, cols[i]);
+      });
+      im.castShadow = true;
+      im.receiveShadow = true;
+      im.computeBoundingSphere();
+      return im;
+    };
+    for (let i = 0; i < veg.geos.length; i++) {
+      const im = mk(i);
+      if (im) group.add(im);
     }
   }
 
@@ -925,8 +743,8 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
   if (!night) {
     const st = smokeTexture();
     const rnd = mulberry(99);
-    for (let i = 0; i < 26; i++) {
-      const mat = keep(new THREE.SpriteMaterial({ map: st, color: '#ffffff', transparent: true, opacity: 0.35 + rnd() * 0.3, depthWrite: false, fog: false }));
+    for (let i = 0; i < biome.cloudCount; i++) {
+      const mat = keep(new THREE.SpriteMaterial({ map: st, color: biome.cloudColor(night), transparent: true, opacity: 0.35 + rnd() * 0.3, depthWrite: false, fog: false }));
       const s = new THREE.Sprite(mat);
       const a = rnd() * Math.PI * 2;
       const r = 2200 + rnd() * 1400;

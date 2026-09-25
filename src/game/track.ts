@@ -1,14 +1,25 @@
 import * as THREE from 'three';
 
+export interface GrandstandDef {
+  s: number;
+  lateral: number;
+  len: number;
+  rows: number;
+  seed: number;
+}
+
 export interface TrackDef {
   id: string;
   name: string;
   subtitle: string;
   location: string;
+  biome: string;
   points: [number, number, number][]; // x, y(高度), z
   width: number;
   runoff: number; // 路缘到护墙的距离
   description: string;
+  pit?: { s: number; lateral: number };
+  grandstands?: GrandstandDef[];
 }
 
 export const TRACKS: TrackDef[] = [
@@ -17,9 +28,15 @@ export const TRACKS: TrackDef[] = [
     name: '落日海岸',
     subtitle: 'SUNSET COASTLINE GP',
     location: '太平洋海岸 · 加州',
+    biome: 'coast',
     width: 15,
     runoff: 9,
     description: '依山傍海的高速赛道。长直道尽头接高速弯，中段的发卡弯和连续 S 弯考验走线，山顶盲弯后一路下坡冲回终点。',
+    pit: { s: 20, lateral: 1 },
+    grandstands: [
+      { s: 60, lateral: -1, len: 130, rows: 12, seed: 3 },
+      { s: 0.9, lateral: -1, len: 110, rows: 10, seed: 5 },
+    ],
     points: [
       [0, 0, 0],
       [200, 0, 0],
@@ -50,32 +67,32 @@ export const TRACKS: TrackDef[] = [
     name: '烈焰沙丘',
     subtitle: 'SCORCHED DUNES GP',
     location: '撒哈拉边缘 · 摩洛哥',
+    biome: 'desert',
     width: 16,
     runoff: 10,
-    description: '穿越沙丘腹地的高速环道。超长直道考验极速，连续中速弯穿梭于沙岩峡谷间，终段急升坡接悬崖发卡弯，胆量与技术并存。',
+    description: '穿越沙丘腹地的速度神殿。1.2 km 主直道是极速试炼场，尽头重刹入深沙发卡弯；峡谷段连续反向弯紧贴沙岩壁面，最终沿沙脊高速扫弯冲线。',
+    pit: { s: 0.03, lateral: -1 },
+    grandstands: [
+      { s: 0.08, lateral: -1, len: 140, rows: 12, seed: 3 },
+      { s: 0.55, lateral: -1, len: 100, rows: 10, seed: 5 },
+    ],
     points: [
       [0, 0, 0],
-      [180, 0.5, 0],
-      [360, 1, 10],
-      [520, 2.5, -20],
-      [620, 4, -100],
-      [680, 8, -220],
-      [640, 14, -340],
-      [520, 20, -400],
-      [380, 22, -380],
-      [300, 18, -300],
-      [340, 14, -200],
-      [260, 10, -120],
-      [140, 6, -80],
-      [40, 4, -140],
-      [-60, 8, -240],
-      [-140, 16, -340],
-      [-260, 22, -360],
-      [-360, 18, -300],
-      [-340, 12, -200],
-      [-400, 6, -100],
-      [-360, 2, -20],
-      [-200, 0.5, 0],
+      [0, 0.5, -220],
+      [-20, 1.5, -420],
+      [-80, 4, -580],
+      [-180, 10, -640],
+      [-300, 16, -600],
+      [-360, 20, -500],
+      [-320, 16, -400],
+      [-400, 12, -320],
+      [-500, 8, -280],
+      [-560, 4, -180],
+      [-520, 2, -80],
+      [-440, 1, 20],
+      [-340, 0.5, 80],
+      [-220, 0, 40],
+      [-100, 0, 0],
     ],
   },
 ];
