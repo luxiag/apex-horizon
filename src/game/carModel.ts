@@ -83,7 +83,8 @@ export function prepareCar(def: CarDef, source: THREE.Object3D): PreparedCar {
   const s = def.length / size0.z;
   body.scale.setScalar(s);
   const c0 = box0.getCenter(new THREE.Vector3());
-  body.position.set(-c0.x * s, -box0.min.y * s, -c0.z * s);
+  scene.position.set(def.flip ? c0.x : -c0.x, -c0.y, def.flip ? c0.z : -c0.z);
+  body.position.set(0, (c0.y - box0.min.y) * s, 0);
   root.updateMatrixWorld(true);
   let box = new THREE.Box3(new THREE.Vector3(-size0.x * s * 0.5, 0, -size0.z * s * 0.5), new THREE.Vector3(size0.x * s * 0.5, size0.y * s, size0.z * s * 0.5));
 
