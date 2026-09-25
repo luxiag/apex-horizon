@@ -386,6 +386,12 @@ function TrackSelect() {
   const facts = trackFacts(track);
   const best = g.bestLaps[`${g.trackId}:${g.carId}`];
   const car = carById(g.carId);
+  const trackIdx = TRACKS.findIndex((t) => t.id === g.trackId);
+  const changeTrack = (d: number) => {
+    const next = TRACKS[(trackIdx + d + TRACKS.length) % TRACKS.length];
+    audio.uiMove();
+    g.set({ trackId: next.id });
+  };
   const start = () => {
     audio.ensure();
     audio.uiSelect();
@@ -398,6 +404,8 @@ function TrackSelect() {
         audio.uiBack();
         g.go('menu');
       }
+      if (e.code === 'ArrowLeft' || e.code === 'KeyA') changeTrack(-1);
+      if (e.code === 'ArrowRight' || e.code === 'KeyD') changeTrack(1);
     };
     window.addEventListener('keydown', h);
     return () => window.removeEventListener('keydown', h);
@@ -414,12 +422,28 @@ function TrackSelect() {
         <span className="chip">座驾 · {car.brand} {car.model}</span>
       </div>
       <div className="track-body">
-        <div className="track-map fade-in">
-          <TrackMapBig trackId={g.trackId} />
-          <div className="corner" style={{ left: -1, top: -1, borderWidth: '2px 0 0 2px' }} />
-          <div className="corner" style={{ right: -1, top: -1, borderWidth: '2px 2px 0 0' }} />
-          <div className="corner" style={{ left: -1, bottom: -1, borderWidth: '0 0 2px 2px' }} />
-          <div className="corner" style={{ right: -1, bottom: -1, borderWidth: '0 2px 2px 0' }} />
+        <div style={{ position: 'relative' }}>
+          <div className="track-map fade-in">
+            <TrackMapBig trackId={g.trackId} />
+            <div className="corner" style={{ left: -1, top: -1, borderWidth: '2px 0 0 2px' }} />
+            <div className="corner" style={{ right: -1, top: -1, borderWidth: '2px 2px 0 0' }} />
+            <div className="corner" style={{ left: -1, bottom: -1, borderWidth: '0 0 2px 2px' }} />
+            <div className="corner" style={{ right: -1, bottom: -1, borderWidth: '0 2px 2px 0' }} />
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8 }}>
+            <div className="arrow" style={{ cursor: 'pointer', fontSize: 20, opacity: 0.6 }} onClick={() => changeTrack(-1)}>◀</div>
+            {TRACKS.map((t, i) => (
+              <div
+                key={t.id}
+                className={`car-card ${t.id === g.trackId ? 'on' : ''}`}
+                style={{ padding: '4px 12px', cursor: 'pointer' }}
+                onClick={() => { audio.uiMove(); g.set({ trackId: t.id }); }}
+              >
+                <span style={{ fontSize: 12 }}>{t.name}</span>
+              </div>
+            ))}
+            <div className="arrow" style={{ cursor: 'pointer', fontSize: 20, opacity: 0.6 }} onClick={() => changeTrack(1)}>▶</div>
+          </div>
         </div>
         <div className="slide-in">
           <span className="chip">{def.location}</span>
@@ -469,7 +493,7 @@ function TrackSelect() {
             </div>
             <div className="setting-row">
               <span>时间</span>
-              <Seg<TimeOfDay> value={g.timeOfDay} options={[['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚']]} onChange={(v) => g.set({ timeOfDay: v })} />
+              <Seg<TimeOfDay> value={g.timeOfDay} options={[['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['heatwave', '热浪']]} onChange={(v) => g.set({ timeOfDay: v })} />
             </div>
           </div>
           <button className="btn" onClick={start}>

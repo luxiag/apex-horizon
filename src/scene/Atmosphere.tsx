@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import type { TimeOfDay } from '../game/store';
 
 export interface TodPreset {
+  id: string;
   sunElevation: number; // 度
   sunAzimuth: number; // 弧度
   sunColor: string;
@@ -25,6 +26,7 @@ export interface TodPreset {
 
 export const TOD: Record<TimeOfDay, TodPreset> = {
   sunset: {
+    id: 'sunset',
     sunElevation: 3.2,
     sunAzimuth: -0.65,
     sunColor: '#ffa468',
@@ -43,6 +45,7 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     night: false,
   },
   noon: {
+    id: 'noon',
     sunElevation: 58,
     sunAzimuth: -0.4,
     sunColor: '#fff6ea',
@@ -61,6 +64,7 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     night: false,
   },
   night: {
+    id: 'night',
     sunElevation: -12,
     sunAzimuth: -0.65,
     sunColor: '#9db8ff',
@@ -77,6 +81,25 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     mieDirectionalG: 0.8,
     envIntensity: 0.6,
     night: true,
+  },
+  heatwave: {
+    id: 'heatwave',
+    sunElevation: 72,
+    sunAzimuth: -0.3,
+    sunColor: '#ffe4a0',
+    sunIntensity: 4.2,
+    hemiSky: '#f0d8a0',
+    hemiGround: '#8b6e4e',
+    hemiIntensity: 1.0,
+    fog: '#d4b87a',
+    fogNear: 280,
+    fogFar: 2800,
+    turbidity: 15,
+    rayleigh: 2.0,
+    mieCoefficient: 0.015,
+    mieDirectionalG: 0.9,
+    envIntensity: 1.1,
+    night: false,
   },
 };
 
@@ -147,7 +170,7 @@ export function Atmosphere({ tod, follow, quality }: { tod: TimeOfDay; follow: (
         {/* 下半球是地面而不是天空，避免车身下部反射出天空显得“飘” */}
         <mesh position={[0, -2, 0]} rotation-x={-Math.PI / 2}>
           <circleGeometry args={[400, 32]} />
-          <meshBasicMaterial color={p.night ? '#07090c' : p.sunElevation < 10 ? '#3a3027' : '#3d4435'} />
+          <meshBasicMaterial color={p.night ? '#07090c' : p.sunElevation < 10 ? '#3a3027' : p.id === 'heatwave' ? '#8b6e4e' : '#3d4435'} />
         </mesh>
         {p.night && (
           <>
