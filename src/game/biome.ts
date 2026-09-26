@@ -1,7 +1,7 @@
 import * as THREE from 'three';
 import { mergeGeometries } from 'three/examples/jsm/utils/BufferGeometryUtils.js';
 import { fbm, ridged, smoothstep, noise2 } from './noise';
-import { asphaltRoughness, grassTexture } from './textures';
+import { asphaltRoughness, grassTexture, snowRoadTexture, lavaRoadTexture } from './textures';
 
 export interface TerrainColorSet {
   baseA: THREE.Color;
@@ -31,6 +31,28 @@ export interface VegetationDef {
   placementSkip?: (x: number, z: number) => boolean;
 }
 
+export interface ParticleDef {
+  type: 'dust' | 'snow' | 'ash';
+  color: string;
+  count: number;
+  size: number;
+  heightMin: number;
+  heightMax: number;
+  speed: number;
+  drift: number;
+  opacity: number;
+}
+
+export interface LandmarkDef {
+  geo: THREE.BufferGeometry;
+  mat: THREE.MeshStandardMaterial;
+  minDistFromWall: number;
+  maxDistFromWall: number;
+  count: number;
+  scaleY: number;
+  yOffset: number;
+}
+
 export interface TrackBiome {
   naturalHeight: (x: number, z: number) => number;
   terrainColor: (night: boolean) => TerrainColorSet;
@@ -57,6 +79,12 @@ export interface TrackBiome {
   vegetation: (night: boolean) => VegetationDef;
   cloudCount: number;
   cloudColor: (night: boolean) => string;
+  particles?: ParticleDef[]; // DEPRECATED - do not use
+  landmarks?: (night: boolean) => LandmarkDef[];
+  roadOverlay?: () => { texture: THREE.Texture; opacity: number; color: string };
+  lampColor: string;
+  lampEmissive: string;
+  lampIntensity: (night: boolean) => number;
 }
 
 function paint(g: THREE.BufferGeometry, color: string) {
@@ -162,7 +190,7 @@ export const coastBiome: TrackBiome = {
     })();
     return {
       geos: [pine, broad],
-      density: { high: 5200, medium: 2600 },
+      density: { high: 3200, medium: 1600 },
       heightRange: [1.5, 170],
       scatterRange: 1500,
       scatterZBase: -1500,
@@ -185,6 +213,10 @@ export const coastBiome: TrackBiome = {
 
   cloudCount: 26,
   cloudColor: () => '#ffffff',
+
+  lampColor: '#fdf6e3',
+  lampEmissive: '#fff4d6',
+  lampIntensity: (night) => night ? 6 : 0.2,
 };
 
 export const desertBiome: TrackBiome = {
@@ -300,6 +332,55 @@ export const desertBiome: TrackBiome = {
 
   cloudCount: 8,
   cloudColor: (night) => night ? '#3d3220' : '#e8d0a0',
+
+  particles: undefined,
+
+  landmarks(night): LandmarkDef[] {
+    const archGeo = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const base1 = new THREE.BoxGeometry(3.5, 9, 3);
+      base1.translate(-3.2, 4.5, 0);
+      parts.push(base1);
+      const base2 = new THREE.BoxGeometry(3.5, 9, 3);
+      base2.translate(3.2, 4.5, 0);
+      parts.push(base2);
+      const arch = new THREE.TorusGeometry(3.5, 1.8, 6, 8, Math.PI);
+      arch.translate(0, 9, 0);
+      parts.push(arch);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    const wellGeo = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const wall = new THREE.TorusGeometry(2.2, 0.5, 6, 12);
+      wall.translate(0, 0.5, 0);
+      parts.push(wall);
+      const base = new THREE.CylinderGeometry(2.5, 2.8, 0.6, 12);
+      base.translate(0, 0.3, 0);
+      parts.push(base);
+      const post1 = new THREE.CylinderGeometry(0.12, 0.12, 3.5, 6);
+      post1.translate(-1.8, 2.3, 0);
+      parts.push(post1);
+      const post2 = new THREE.CylinderGeometry(0.12, 0.12, 3.5, 6);
+      post2.translate(1.8, 2.3, 0);
+      parts.push(post2);
+      const beam = new THREE.BoxGeometry(4, 0.2, 0.2);
+      beam.translate(0, 4, 0);
+      parts.push(beam);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    return [
+      { geo: archGeo, mat: new THREE.MeshStandardMaterial({ color: night ? '#6a5538' : '#b89e6e', roughness: 0.95 }), minDistFromWall: 30, maxDistFromWall: 280, count: 8, scaleY: 1, yOffset: 0 },
+      { geo: wellGeo, mat: new THREE.MeshStandardMaterial({ color: night ? '#5a4830' : '#8b7355', roughness: 0.9 }), minDistFromWall: 20, maxDistFromWall: 150, count: 6, scaleY: 1, yOffset: 0 },
+    ];
+  },
+
+  lampColor: '#ffe0a0',
+  lampEmissive: '#ffe0a0',
+  lampIntensity: (night) => night ? 5 : 0.15,
 };
 
 export const snowBiome: TrackBiome = {
@@ -384,7 +465,7 @@ export const snowBiome: TrackBiome = {
     })();
     return {
       geos: [snowPine, bareTree],
-      density: { high: 3200, medium: 1600 },
+      density: { high: 2000, medium: 1000 },
       heightRange: [0, 200],
       scatterRange: 1600,
       scatterZBase: -1400,
@@ -404,6 +485,57 @@ export const snowBiome: TrackBiome = {
 
   cloudCount: 32,
   cloudColor: (night) => night ? '#2a3a4a' : '#c8d8e8',
+
+  particles: undefined,
+
+  landmarks(night): LandmarkDef[] {
+    const icefallGeo = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const cliff = new THREE.BoxGeometry(6, 14, 2.5);
+      cliff.translate(0, 7, 0);
+      parts.push(cliff);
+      for (let i = 0; i < 8; i++) {
+        const icicle = new THREE.ConeGeometry(0.3 + Math.random() * 0.4, 2 + Math.random() * 3, 5);
+        icicle.translate(-2.5 + i * 0.7, 14 - Math.random() * 0.5, 1.3);
+        parts.push(icicle);
+      }
+      const pool = new THREE.CylinderGeometry(4, 4, 0.3, 12);
+      pool.translate(0, 0.15, 2.5);
+      parts.push(pool);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    const snowmanGeo = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const body = new THREE.SphereGeometry(1.2, 10, 8);
+      body.translate(0, 1.2, 0);
+      parts.push(body);
+      const mid = new THREE.SphereGeometry(0.9, 10, 8);
+      mid.translate(0, 2.9, 0);
+      parts.push(mid);
+      const head = new THREE.SphereGeometry(0.6, 10, 8);
+      head.translate(0, 4.1, 0);
+      parts.push(head);
+      const nose = new THREE.ConeGeometry(0.12, 0.5, 6);
+      nose.rotateX(Math.PI / 2);
+      nose.translate(0, 4.1, 0.6);
+      parts.push(nose);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    return [
+      { geo: icefallGeo, mat: new THREE.MeshStandardMaterial({ color: night ? '#4a6a8a' : '#a0d0f0', roughness: 0.3, metalness: 0.1, transparent: true, opacity: 0.85 }), minDistFromWall: 25, maxDistFromWall: 200, count: 6, scaleY: 1, yOffset: 0 },
+      { geo: snowmanGeo, mat: new THREE.MeshStandardMaterial({ color: night ? '#c0d0e0' : '#f0f4f8', roughness: 0.8 }), minDistFromWall: 15, maxDistFromWall: 100, count: 10, scaleY: 1, yOffset: 0 },
+    ];
+  },
+
+  roadOverlay: () => ({ texture: snowRoadTexture(), opacity: 0.55, color: '#e0eaf4' }),
+
+  lampColor: '#a0d0ff',
+  lampEmissive: '#a0d0ff',
+  lampIntensity: (night) => night ? 4 : 0.3,
 };
 
 export const volcanoBiome: TrackBiome = {
@@ -509,6 +641,50 @@ export const volcanoBiome: TrackBiome = {
 
   cloudCount: 18,
   cloudColor: (night) => night ? '#1a0e08' : '#5a4030',
+
+  particles: undefined,
+
+  landmarks(night): LandmarkDef[] {
+    const fumaroleGeo = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const vent = new THREE.CylinderGeometry(0.5, 0.8, 1.5, 8, 1, true);
+      vent.translate(0, 0.75, 0);
+      parts.push(vent);
+      const rim = new THREE.TorusGeometry(0.65, 0.2, 6, 8);
+      rim.translate(0, 1.5, 0);
+      parts.push(rim);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    const lavaPoolGeo = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const pool = new THREE.CylinderGeometry(3.5, 3.5, 0.4, 16);
+      pool.translate(0, 0.2, 0);
+      const poolNI = pool.toNonIndexed();
+      pool.dispose();
+      parts.push(poolNI);
+      const rock1 = new THREE.DodecahedronGeometry(1.5, 0);
+      rock1.translate(2.8, 0.6, 1.2);
+      parts.push(rock1);
+      const rock2 = new THREE.DodecahedronGeometry(1.2, 0);
+      rock2.translate(-2, 0.5, -2);
+      parts.push(rock2);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    return [
+      { geo: fumaroleGeo, mat: new THREE.MeshStandardMaterial({ color: '#3a2a1a', roughness: 0.9, emissive: '#ff4a10', emissiveIntensity: night ? 3 : 0.6 }), minDistFromWall: 15, maxDistFromWall: 120, count: 12, scaleY: 1, yOffset: 0 },
+      { geo: lavaPoolGeo, mat: new THREE.MeshStandardMaterial({ color: night ? '#4a1a08' : '#6a2a10', roughness: 0.7, emissive: '#ff2a00', emissiveIntensity: night ? 4 : 0.8 }), minDistFromWall: 30, maxDistFromWall: 200, count: 5, scaleY: 1, yOffset: -0.3 },
+    ];
+  },
+
+  roadOverlay: () => ({ texture: lavaRoadTexture(), opacity: 0.4, color: '#3a1a0a' }),
+
+  lampColor: '#ff3020',
+  lampEmissive: '#ff3020',
+  lampIntensity: (night) => night ? 5 : 0.4,
 };
 
 const BIOME_MAP: Record<string, TrackBiome> = {

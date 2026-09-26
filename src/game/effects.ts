@@ -169,13 +169,17 @@ export class Particles {
   }
   private baseAlpha: Float32Array;
 
+  private activeCount = 0;
+
   update(dt: number) {
     const k = Math.exp(-this.drag * dt);
+    let active = 0;
     for (let i = 0; i < this.max; i++) {
       if (this.life[i] <= 0) {
         if (this.alpha[i] !== 0) this.alpha[i] = 0;
         continue;
       }
+      active++;
       this.life[i] -= dt;
       const t = Math.max(0, this.life[i] / this.maxLife[i]);
       this.vel[i * 3] *= k;
@@ -187,10 +191,13 @@ export class Particles {
       this.size[i] += this.grow[i] * dt;
       this.alpha[i] = this.baseAlpha[i] * t * Math.min(1, (1 - t) * 8);
     }
-    this.geo.attributes.position.needsUpdate = true;
-    this.geo.attributes.size.needsUpdate = true;
-    this.geo.attributes.alpha.needsUpdate = true;
-    this.geo.attributes.pcolor.needsUpdate = true;
+    if (active > 0 || this.activeCount > 0) {
+      this.geo.attributes.position.needsUpdate = true;
+      this.geo.attributes.size.needsUpdate = true;
+      this.geo.attributes.alpha.needsUpdate = true;
+      this.geo.attributes.pcolor.needsUpdate = true;
+    }
+    this.activeCount = active;
   }
 
   reset() {

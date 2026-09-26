@@ -88,7 +88,7 @@ export function RaceScene() {
 
   const { camera, size, gl } = useThree();
   const headlight = useRef<THREE.SpotLight>(null);
-  const cam = useRef({ yaw: 0, mode: 0, shake: 0, dist: 6, t: 0, pitchLag: 0, fov: 60, lastCountdown: -1, resultsSent: false, lastPhase: 'intro' as string });
+  const cam = useRef({ yaw: 0, mode: 0, shake: 0, dist: 6, t: 0, pitchLag: 0, fov: 60, lastCountdown: -1, resultsSent: false, lastPhase: 'intro' as string, shadowFrame: 0 });
   const accumulator = useRef(0);
 
   useEffect(() => {
@@ -188,6 +188,11 @@ export function RaceScene() {
         }
       }
       c.lastPhase = session.phase;
+    }
+    gl.shadowMap.autoUpdate = false;
+    gl.shadowMap.needsUpdate = session.phase === 'racing' && (c.shadowFrame++ % 2 === 0);
+    if (session.phase === 'racing' && c.lastPhase !== 'racing') {
+      gl.shadowMap.needsUpdate = true;
     }
     if (session.phase === 'finished' && session.phaseTime > 4 && !c.resultsSent) {
       c.resultsSent = true;

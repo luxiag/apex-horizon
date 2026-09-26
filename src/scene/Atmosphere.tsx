@@ -176,7 +176,7 @@ export function Atmosphere({ tod, follow, quality }: { tod: TimeOfDay; follow: (
     l.target.updateMatrixWorld();
   });
 
-  const size = quality === 'high' ? 4096 : 2048;
+  const size = quality === 'high' ? 2048 : 1024;
   return (
     <>
       <Sky distance={6000} sunPosition={skyPos} turbidity={p.turbidity} rayleigh={p.rayleigh} mieCoefficient={p.mieCoefficient} mieDirectionalG={p.mieDirectionalG} />

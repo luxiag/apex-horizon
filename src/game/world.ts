@@ -22,12 +22,23 @@ import {
 
 export const WATER_LEVEL = -2;
 
+export interface BiomeParticleAnim {
+  points: THREE.Points;
+  type: string;
+  speed: number;
+  drift: number;
+  heightMin: number;
+  heightMax: number;
+  scatterRange: number;
+}
+
 export interface World {
   group: THREE.Group;
   startLights: THREE.MeshStandardMaterial[];
   water: THREE.Mesh;
   lampMaterials: THREE.MeshStandardMaterial[];
   groundHeight: (x: number, z: number) => number;
+  biomeParticles: BiomeParticleAnim[];
   dispose: () => void;
 }
 
@@ -223,6 +234,27 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     m.receiveShadow = true;
     m.name = 'road';
     group.add(m);
+
+    if (biome.roadOverlay) {
+      const overlay = biome.roadOverlay();
+      const overlayTex = overlay.texture;
+      overlayTex.repeat.set(4, 4);
+      const overlayMat = keep(
+        new THREE.MeshStandardMaterial({
+          map: overlayTex,
+          color: overlay.color,
+          transparent: true,
+          opacity: overlay.opacity,
+          roughness: 0.85,
+          metalness: 0,
+          polygonOffset: true,
+          polygonOffsetFactor: -1,
+        }),
+      );
+      const om = new THREE.Mesh(toGeom(r), overlayMat);
+      om.name = 'road-overlay';
+      group.add(om);
+    }
   }
 
   // 路肩草地（路面边缘到护墙外）
@@ -299,7 +331,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const bt = barrierTexture();
     const mat = keep(new THREE.MeshStandardMaterial({ map: bt, roughness: 0.55, side: THREE.DoubleSide, emissive: night ? '#ffffff' : '#000000', emissiveMap: night ? bt : null, emissiveIntensity: night ? 0.25 : 0 }));
     const m = new THREE.Mesh(toGeom(r), mat);
-    m.castShadow = true;
+    m.castShadow = false;
     m.receiveShadow = true;
     group.add(m);
 
@@ -414,14 +446,14 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const seatGeo = mergeGeometries(geos)!;
     geos.forEach((g) => g.dispose());
     const seats = new THREE.Mesh(keep(seatGeo), keep(new THREE.MeshStandardMaterial({ color: '#3b4452', roughness: 0.8 })));
-    seats.castShadow = true;
+    seats.castShadow = false;
     seats.receiveShadow = true;
     gs.add(seats);
     const roofGeo = keep(new THREE.BoxGeometry(len + 2, 0.3, rows * 0.9 + 3));
     const roof = new THREE.Mesh(roofGeo, keep(new THREE.MeshStandardMaterial({ color: '#e8e8ea', roughness: 0.4, metalness: 0.3 })));
     roof.position.set(0, rows * 0.5 + 4.6, 1.2 + (rows * 0.9) / 2);
     roof.rotation.x = -0.06;
-    roof.castShadow = true;
+    roof.castShadow = false;
     gs.add(roof);
     const colGeo = keep(new THREE.CylinderGeometry(0.18, 0.18, rows * 0.5 + 4.6, 8));
     for (let x = -len / 2 + 2; x <= len / 2 - 2; x += 12) {
@@ -482,7 +514,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const len = 180;
     const body = new THREE.Mesh(keep(new THREE.BoxGeometry(len, 10, 18)), keep(new THREE.MeshStandardMaterial({ color: '#dfe3e8', roughness: 0.5, metalness: 0.2 })));
     body.position.set(0, 5, 11);
-    body.castShadow = true;
+    body.castShadow = false;
     body.receiveShadow = true;
     pit.add(body);
     const wt = windowsTexture();
@@ -526,12 +558,12 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     for (const side of [-1, 1]) {
       const p = new THREE.Mesh(pillarGeo, darkMetal);
       p.position.set(side * (span / 2), 4.25, 0);
-      p.castShadow = true;
+      p.castShadow = false;
       g.add(p);
     }
     const beam = new THREE.Mesh(keep(new THREE.BoxGeometry(span + 1, 2.2, 1.2)), darkMetal);
     beam.position.set(0, 7.6, 0);
-    beam.castShadow = true;
+    beam.castShadow = false;
     g.add(beam);
     const ledTex = textTexture([{ text: 'START  ·  FINISH', color: '#ffffff', font: 'italic 900 110px Arial Black, Arial', y: 80 }], 1024, 160, '#000000');
     keep(ledTex);
@@ -587,13 +619,13 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
       keep(new THREE.MeshStandardMaterial({ map: archTex, emissive: '#ffffff', emissiveMap: archTex, emissiveIntensity: night ? 0.7 : 0.05 })),
     ]);
     deck.position.y = 8.2;
-    deck.castShadow = true;
+    deck.castShadow = false;
     g.add(deck);
     const legGeo = keep(new THREE.BoxGeometry(2.2, 8.2, 3.2));
     for (const side of [-1, 1]) {
       const leg = new THREE.Mesh(legGeo, concrete);
       leg.position.set(side * (span / 2 - 1.1), 4.1, 0);
-      leg.castShadow = true;
+      leg.castShadow = false;
       g.add(leg);
     }
     const p = track.pointAt(bestS, 0);
@@ -607,7 +639,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     const poleGeo = keep(new THREE.CylinderGeometry(0.18, 0.28, 16, 8));
     poleGeo.translate(0, 8, 0);
     const headGeo = keep(new THREE.BoxGeometry(3.2, 1.4, 0.5));
-    const headMat = keep(new THREE.MeshStandardMaterial({ color: '#fdf6e3', emissive: '#fff4d6', emissiveIntensity: night ? 6 : 0.2 }));
+    const headMat = keep(new THREE.MeshStandardMaterial({ color: biome.lampColor, emissive: biome.lampEmissive, emissiveIntensity: biome.lampIntensity(night) }));
     lampMaterials.push(headMat);
     const count = Math.floor(L / 85);
     const poles = new THREE.InstancedMesh(poleGeo, steel, count);
@@ -631,12 +663,12 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
       heads.setMatrixAt(k, m);
       glowPos.push(hp.x, p.y + 15.8, hp.z);
     }
-    poles.castShadow = true;
+    poles.castShadow = false;
     group.add(poles, heads);
     if (night) {
       const gg = new THREE.BufferGeometry();
       gg.setAttribute('position', new THREE.Float32BufferAttribute(glowPos, 3));
-      const pm = keep(new THREE.PointsMaterial({ map: glowTexture(), color: '#ffe9c4', size: 22, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
+      const pm = keep(new THREE.PointsMaterial({ map: glowTexture(), color: biome.lampEmissive, size: 22, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, sizeAttenuation: true }));
       group.add(new THREE.Points(keep(gg), pm));
     }
   }
@@ -668,7 +700,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
         back.position.set(0, 8.5, 0.2);
         back.rotation.y = Math.PI;
         g.add(b, back);
-        b.castShadow = true;
+        b.castShadow = false;
         const p = track.pointAt(sb, side * (wall + 12));
         g.position.set(p.x, groundHeight(p.x, p.z) - 0.5, p.z);
         g.rotation.y = track.headingAt(sb) + Math.PI + side * 0.5;
@@ -728,7 +760,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
         im.setMatrixAt(i, mm);
         im.setColorAt(i, cols[i]);
       });
-      im.castShadow = true;
+      im.castShadow = false;
       im.receiveShadow = true;
       im.computeBoundingSphere();
       return im;
@@ -736,6 +768,45 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     for (let i = 0; i < veg.geos.length; i++) {
       const im = mk(i);
       if (im) group.add(im);
+    }
+  }
+
+  // ---- 群系粒子 (disabled) ----
+  const biomeParticles: BiomeParticleAnim[] = [];
+
+  // ---- 群系地标 ----
+  if (biome.landmarks) {
+    const lmDefs = biome.landmarks(night);
+    const rnd = mulberry(42);
+    for (const lm of lmDefs) {
+      const im = new THREE.InstancedMesh(lm.geo, lm.mat, lm.count);
+      const mtx = new THREE.Matrix4();
+      const up = new THREE.Vector3(0, 1, 0);
+      const q2 = new THREE.Quaternion();
+      let placed = 0;
+      let tries = 0;
+      while (placed < lm.count && tries < lm.count * 50) {
+        tries++;
+        const s = rnd() * L;
+        const side = rnd() < 0.5 ? 1 : -1;
+        const latDist = wall + lm.minDistFromWall + rnd() * (lm.maxDistFromWall - lm.minDistFromWall);
+        const p = track.pointAt(s, side * latDist);
+        const y = groundHeight(p.x, p.z);
+        if (!isFinite(y)) continue;
+        const psi = track.headingAt(s);
+        q2.setFromAxisAngle(up, psi + (rnd() - 0.5) * 0.8);
+        const sc = 0.8 + rnd() * 0.6;
+        mtx.compose(
+          new THREE.Vector3(p.x, y + lm.yOffset, p.z),
+          q2,
+          new THREE.Vector3(sc, sc * lm.scaleY, sc),
+        );
+        im.setMatrixAt(placed, mtx);
+        placed++;
+      }
+      im.count = placed;
+      im.castShadow = false;
+      group.add(im);
     }
   }
 
@@ -762,6 +833,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     water,
     lampMaterials,
     groundHeight,
+    biomeParticles,
     dispose: () => disposables.forEach((d) => d.dispose()),
   };
 }
