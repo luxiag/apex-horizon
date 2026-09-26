@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 
 export type Screen = 'intro' | 'menu' | 'garage' | 'tracks' | 'race' | 'results';
-export type TimeOfDay = 'sunset' | 'noon' | 'night' | 'heatwave';
+export type TimeOfDay = 'sunset' | 'noon' | 'night' | 'heatwave' | 'blizzard' | 'volcanic';
 export type Difficulty = 'easy' | 'normal' | 'hard';
 
 export interface RaceResultRow {

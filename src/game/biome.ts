@@ -302,9 +302,220 @@ export const desertBiome: TrackBiome = {
   cloudColor: (night) => night ? '#3d3220' : '#e8d0a0',
 };
 
+export const snowBiome: TrackBiome = {
+  naturalHeight(x, z) {
+    const mountains = ridged(x * 0.001 + 5, z * 0.001 - 8, 5) * 280 * smoothstep(500, 1600, Math.hypot(x, z));
+    const foothills = (fbm(x * 0.0025 + 3, z * 0.0025 + 7, 5) - 0.45) * 55;
+    const valley = smoothstep(0.5, 0.65, fbm(x * 0.0015 + 12, z * 0.0015 + 18, 4)) * 30;
+    return foothills + mountains - valley;
+  },
+
+  terrainColor(night): TerrainColorSet {
+    return {
+      baseA: new THREE.Color(night ? '#8ba4b8' : '#e8f0f8'),
+      baseB: new THREE.Color(night ? '#7a94a8' : '#d0e0f0'),
+      rock: new THREE.Color('#6b7280'),
+      extra1: new THREE.Color(night ? '#5a7088' : '#a0c8e8'),
+      extra2: new THREE.Color('#4a5568'),
+    };
+  },
+
+  paintTerrainVertex(cTmp, colors, x, y, z, ny, v) {
+    cTmp.copy(colors.baseA).lerp(colors.baseB, smoothstep(0.3, 0.7, v));
+    cTmp.lerp(colors.extra1, smoothstep(0.5, 0.8, fbm(x * 0.003 + 8, z * 0.003 + 3, 3)) * 0.4);
+    cTmp.lerp(colors.rock, smoothstep(0.85, 0.65, ny));
+    cTmp.lerp(colors.extra2, smoothstep(80, 180, y) * 0.6);
+    cTmp.lerp(colors.rock, smoothstep(50, 100, y) * smoothstep(0.9, 0.7, ny) * 0.8);
+  },
+
+  terrainTexture: grassTexture,
+  terrainRoughness: 0.92,
+
+  waterLevel: -4,
+  waterColor: (night) => night ? '#0a1520' : '#3a7ca5',
+  waterRoughness: 0.7,
+  waterMetalness: 0.05,
+  waterNormalMap: true,
+  waterClearcoat: 0.3,
+  waterEnvIntensity: 0.8,
+
+  shoulderTexture: grassTexture,
+  shoulderColor: (night) => night ? '#5a7080' : '#c8d8e8',
+  gravelColor: '#8898a8',
+
+  bannerText: 'APEX RUSH  ·  FROZEN PEAKS GRAND PRIX',
+  bannerBg: '#2a5a8a',
+
+  vegetation(night): VegetationDef {
+    const snowPine = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const trunk = new THREE.CylinderGeometry(0.18, 0.28, 2.4, 6);
+      trunk.translate(0, 1.2, 0);
+      paint(trunk, '#4a3d30');
+      parts.push(trunk);
+      for (let k = 0; k < 4; k++) {
+        const r = 2.3 - k * 0.45;
+        const cone = new THREE.ConeGeometry(r, 3.2 - k * 0.3, 8);
+        cone.translate(0, 2.6 + k * 1.55, 0);
+        paint(cone, ['#2a4a3a', '#4a6a5a', '#8aaa98', '#c8d8d0'][k]);
+        parts.push(cone);
+      }
+      const cap = new THREE.ConeGeometry(0.7, 1.0, 8);
+      cap.translate(0, 8.9, 0);
+      paint(cap, '#e8f0f8');
+      parts.push(cap);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    const bareTree = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const trunk = new THREE.CylinderGeometry(0.1, 0.18, 3, 6);
+      trunk.translate(0, 1.5, 0);
+      paint(trunk, '#5a4a3a');
+      parts.push(trunk);
+      const snow = new THREE.SphereGeometry(0.6, 6, 4);
+      snow.translate(0, 3.2, 0);
+      paint(snow, '#d8e8f0');
+      parts.push(snow);
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    return {
+      geos: [snowPine, bareTree],
+      density: { high: 3200, medium: 1600 },
+      heightRange: [0, 200],
+      scatterRange: 1600,
+      scatterZBase: -1400,
+      scatterZRange: 2000,
+      densityNoiseScale: 0.005,
+      densityNoiseOffset: 30,
+      densityThreshold: -0.1,
+      colorHue: 0.5,
+      colorHueVar: 0.08,
+      colorSat: 0.12,
+      colorSatVar: 0.1,
+      colorLgt: 0.72,
+      colorLgtVar: 0.18,
+      groundOffset: -0.15,
+    };
+  },
+
+  cloudCount: 32,
+  cloudColor: (night) => night ? '#2a3a4a' : '#c8d8e8',
+};
+
+export const volcanoBiome: TrackBiome = {
+  naturalHeight(x, z) {
+    const r = Math.hypot(x, z);
+    const caldera = -smoothstep(180, 350, r) * smoothstep(800, 500, r) * 80;
+    const ridges = ridged(x * 0.002 + 10, z * 0.002 - 5, 5) * 120 * smoothstep(400, 1400, r);
+    const lavaFlows = (fbm(x * 0.004 + 3, z * 0.004 + 7, 4) - 0.5) * 30 * smoothstep(200, 600, r);
+    const base = (fbm(x * 0.001 + 20, z * 0.001 + 15, 5) - 0.4) * 40;
+    return base + ridges + caldera + lavaFlows;
+  },
+
+  terrainColor(night): TerrainColorSet {
+    return {
+      baseA: new THREE.Color(night ? '#1a1412' : '#3a3028'),
+      baseB: new THREE.Color(night ? '#2a1e18' : '#4a3a2e'),
+      rock: new THREE.Color(night ? '#1c1816' : '#2a2420'),
+      extra1: new THREE.Color(night ? '#3a1a0a' : '#6a3a1a'),
+      extra2: new THREE.Color(night ? '#1a0e08' : '#1a1008'),
+    };
+  },
+
+  paintTerrainVertex(cTmp, colors, x, y, z, ny, v) {
+    cTmp.copy(colors.baseA).lerp(colors.baseB, smoothstep(0.3, 0.7, v));
+    const lavaNoise = fbm(x * 0.005 + 25, z * 0.005 + 30, 3);
+    cTmp.lerp(colors.extra1, smoothstep(0.55, 0.75, lavaNoise) * 0.5);
+    cTmp.lerp(colors.rock, smoothstep(0.85, 0.65, ny));
+    cTmp.lerp(colors.extra2, smoothstep(20, -5, y) * 0.6);
+    cTmp.lerp(colors.extra1, smoothstep(0.65, 0.8, lavaNoise) * smoothstep(-3, 15, y) * 0.35);
+  },
+
+  terrainTexture: asphaltRoughness,
+  terrainRoughness: 0.98,
+
+  waterLevel: -12,
+  waterColor: (night) => night ? '#2a0a04' : '#6a2a10',
+  waterRoughness: 0.85,
+  waterMetalness: 0,
+  waterNormalMap: false,
+  waterClearcoat: 0,
+  waterEnvIntensity: 0.4,
+
+  shoulderTexture: asphaltRoughness,
+  shoulderColor: (night) => night ? '#2a1e18' : '#4a3828',
+  gravelColor: '#3a2e24',
+
+  bannerText: 'APEX RUSH  ·  INFERNO RING GRAND PRIX',
+  bannerBg: '#8a1a0a',
+
+  vegetation(night): VegetationDef {
+    const deadTree = (() => {
+      const parts: THREE.BufferGeometry[] = [];
+      const trunk = new THREE.CylinderGeometry(0.12, 0.22, 3.5, 5);
+      trunk.translate(0, 1.75, 0);
+      paint(trunk, '#2a2018');
+      parts.push(trunk);
+      for (let i = 0; i < 3; i++) {
+        const branch = new THREE.CylinderGeometry(0.04, 0.08, 1.5, 4);
+        branch.translate(0, 0.75, 0);
+        const angle = (i * Math.PI * 2) / 3 + 0.3;
+        branch.rotateZ(0.6 + i * 0.2);
+        branch.rotateY(angle);
+        branch.translate(Math.sin(angle) * 0.3, 2.5 + i * 0.4, Math.cos(angle) * 0.3);
+        paint(branch, '#2a2018');
+        parts.push(branch);
+      }
+      const merged = mergeGeometries(parts)!;
+      parts.forEach((p) => p.dispose());
+      return merged;
+    })();
+    const lavaRock = (() => {
+      const rock = new THREE.DodecahedronGeometry(1.2, 0);
+      const p = rock.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const f = 0.7 + noise2(p.getX(i) * 2, p.getZ(i) * 2) * 0.4;
+        p.setXYZ(i, p.getX(i) * f, p.getY(i) * f * 0.65, p.getZ(i) * f);
+      }
+      rock.translate(0, 0.6, 0);
+      const rockNI = rock.toNonIndexed();
+      paint(rockNI, '#2a2420');
+      rock.dispose();
+      return rockNI;
+    })();
+    return {
+      geos: [deadTree, lavaRock],
+      density: { high: 1400, medium: 700 },
+      heightRange: [-5, 180],
+      scatterRange: 1600,
+      scatterZBase: -1600,
+      scatterZRange: 2400,
+      densityNoiseScale: 0.004,
+      densityNoiseOffset: 25,
+      densityThreshold: -0.2,
+      colorHue: 0.06,
+      colorHueVar: 0.06,
+      colorSat: 0.25,
+      colorSatVar: 0.2,
+      colorLgt: 0.22,
+      colorLgtVar: 0.15,
+      groundOffset: -0.05,
+    };
+  },
+
+  cloudCount: 18,
+  cloudColor: (night) => night ? '#1a0e08' : '#5a4030',
+};
+
 const BIOME_MAP: Record<string, TrackBiome> = {
   coastline: coastBiome,
   desert: desertBiome,
+  snow: snowBiome,
+  volcano: volcanoBiome,
 };
 
 export function getBiome(trackId: string): TrackBiome {

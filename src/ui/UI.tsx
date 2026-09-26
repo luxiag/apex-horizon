@@ -1,12 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { useProgress } from '@react-three/drei';
 import { useGame, type TimeOfDay, type Difficulty } from '../game/store';
 import { CARS, carById } from '../game/cars';
-import { TRACKS, getTrack } from '../game/track';
+import { TRACKS, getTrack, type Track } from '../game/track';
 import { audio } from '../game/audio';
 import { formatLap } from '../game/race';
 import { HUD } from './HUD';
-import { TrackMapBig, trackFacts } from './TrackMap';
+import { TrackMapBig, trackFacts, trackPath } from './TrackMap';
 
 export function UI() {
   const screen = useGame((s) => s.screen);
@@ -379,6 +379,51 @@ function Seg<T extends string | number>({ value, options, onChange }: { value: T
   );
 }
 
+const BIOME_THEME: Record<string, { accent: string; icon: string; label: string; tod: [TimeOfDay, string][] }> = {
+  coast: { accent: '#1d9ea8', icon: '🌊', label: 'COAST', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚']] },
+  desert: { accent: '#d4871a', icon: '🏜', label: 'DESERT', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['heatwave', '热浪']] },
+  snow: { accent: '#6ec6ff', icon: '❄', label: 'ALPINE', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['blizzard', '暴风雪']] },
+  volcano: { accent: '#d43a1a', icon: '🌋', label: 'VOLCANO', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['volcanic', '火山']] },
+};
+
+function MiniTrackMap({ trackId, accent }: { trackId: string; accent: string }) {
+  const track = getTrack(trackId);
+  const W = 120, H = 75;
+  const { d } = useMemo(() => trackPath(track, W, H, 8), [track]);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`}>
+      <path d={d} fill="none" stroke="rgba(255,255,255,0.25)" strokeWidth={5} strokeLinejoin="round" />
+      <path d={d} fill="none" stroke={accent} strokeWidth={1.5} strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function ElevationProfile({ track, accent }: { track: Track; accent: string }) {
+  const W = 800, H = 60;
+  const { line, fill } = useMemo(() => {
+    let minH = Infinity, maxH = -Infinity;
+    for (let i = 0; i < track.count; i++) {
+      minH = Math.min(minH, track.py[i]);
+      maxH = Math.max(maxH, track.py[i]);
+    }
+    const range = maxH - minH || 1;
+    let line = '';
+    for (let i = 0; i < track.count; i += 4) {
+      const x = (i / track.count) * W;
+      const y = H - ((track.py[i] - minH) / range) * (H - 8) - 4;
+      line += `${i === 0 ? 'M' : 'L'}${x.toFixed(1)},${y.toFixed(1)}`;
+    }
+    const fill = line + `L${W},${H}L0,${H}Z`;
+    return { line, fill };
+  }, [track]);
+  return (
+    <svg viewBox={`0 0 ${W} ${H}`} className="elevation-profile">
+      <path d={fill} fill={accent} fillOpacity={0.08} />
+      <path d={line} fill="none" stroke={accent} strokeWidth={1.5} strokeOpacity={0.5} />
+    </svg>
+  );
+}
+
 function TrackSelect() {
   const g = useGame();
   const track = getTrack(g.trackId);
@@ -387,6 +432,7 @@ function TrackSelect() {
   const best = g.bestLaps[`${g.trackId}:${g.carId}`];
   const car = carById(g.carId);
   const trackIdx = TRACKS.findIndex((t) => t.id === g.trackId);
+  const theme = BIOME_THEME[def.biome] ?? BIOME_THEME.coast;
   const changeTrack = (d: number) => {
     const next = TRACKS[(trackIdx + d + TRACKS.length) % TRACKS.length];
     audio.uiMove();
@@ -422,35 +468,27 @@ function TrackSelect() {
         <span className="chip">座驾 · {car.brand} {car.model}</span>
       </div>
       <div className="track-body">
-        <div style={{ position: 'relative' }}>
+        <div className="track-left">
           <div className="track-map fade-in">
             <TrackMapBig trackId={g.trackId} />
-            <div className="corner" style={{ left: -1, top: -1, borderWidth: '2px 0 0 2px' }} />
-            <div className="corner" style={{ right: -1, top: -1, borderWidth: '2px 2px 0 0' }} />
-            <div className="corner" style={{ left: -1, bottom: -1, borderWidth: '0 0 2px 2px' }} />
-            <div className="corner" style={{ right: -1, bottom: -1, borderWidth: '0 2px 2px 0' }} />
+            <div className="corner" style={{ left: -1, top: -1, borderWidth: '2px 0 0 2px', borderColor: theme.accent }} />
+            <div className="corner" style={{ right: -1, top: -1, borderWidth: '2px 2px 0 0', borderColor: theme.accent }} />
+            <div className="corner" style={{ left: -1, bottom: -1, borderWidth: '0 0 2px 2px', borderColor: theme.accent }} />
+            <div className="corner" style={{ right: -1, bottom: -1, borderWidth: '0 2px 2px 0', borderColor: theme.accent }} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12, marginTop: 8 }}>
-            <div className="arrow" style={{ cursor: 'pointer', fontSize: 20, opacity: 0.6 }} onClick={() => changeTrack(-1)}>◀</div>
-            {TRACKS.map((t, i) => (
-              <div
-                key={t.id}
-                className={`car-card ${t.id === g.trackId ? 'on' : ''}`}
-                style={{ padding: '4px 12px', cursor: 'pointer' }}
-                onClick={() => { audio.uiMove(); g.set({ trackId: t.id }); }}
-              >
-                <span style={{ fontSize: 12 }}>{t.name}</span>
-              </div>
-            ))}
-            <div className="arrow" style={{ cursor: 'pointer', fontSize: 20, opacity: 0.6 }} onClick={() => changeTrack(1)}>▶</div>
-          </div>
+          <ElevationProfile track={track} accent={theme.accent} />
         </div>
-        <div className="slide-in">
-          <span className="chip">{def.location}</span>
-          <div className="track-name" style={{ marginTop: 12 }}>
+        <div className="track-info slide-in">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+            <div className="track-biome-badge" style={{ background: theme.accent, color: '#000' }}>
+              {theme.icon} {theme.label}
+            </div>
+            <span className="chip">{def.location}</span>
+          </div>
+          <div className="track-name" style={{ marginTop: 14 }}>
             {def.name}
           </div>
-          <div className="track-sub">{def.subtitle}</div>
+          <div className="track-sub" style={{ color: theme.accent }}>{def.subtitle}</div>
           <div className="track-desc">{def.description}</div>
           <div className="track-facts">
             <div className="fact">
@@ -493,13 +531,39 @@ function TrackSelect() {
             </div>
             <div className="setting-row">
               <span>时间</span>
-              <Seg<TimeOfDay> value={g.timeOfDay} options={[['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['heatwave', '热浪']]} onChange={(v) => g.set({ timeOfDay: v })} />
+              <Seg<TimeOfDay> value={g.timeOfDay} options={theme.tod} onChange={(v) => g.set({ timeOfDay: v })} />
             </div>
           </div>
-          <button className="btn" onClick={start}>
+          <button className="btn" onClick={start} style={{ background: theme.accent }}>
             Start Race<small>开始比赛 · Enter</small>
           </button>
         </div>
+      </div>
+      <div className="track-carousel">
+        <div className="arrow" onClick={() => changeTrack(-1)}>◀</div>
+        {TRACKS.map((t) => {
+          const th = BIOME_THEME[t.biome] ?? BIOME_THEME.coast;
+          const isActive = t.id === g.trackId;
+          return (
+            <div
+              key={t.id}
+              className={`track-card ${isActive ? 'on' : ''}`}
+              style={{ '--tc': th.accent } as React.CSSProperties}
+              onClick={() => { audio.uiMove(); g.set({ trackId: t.id }); }}
+            >
+              <div className="tc-badge" style={{ background: th.accent, color: '#000' }}>
+                {th.icon} {th.label}
+              </div>
+              <div className="tc-map">
+                <MiniTrackMap trackId={t.id} accent={th.accent} />
+              </div>
+              <div className="tc-name">{t.name}</div>
+              <div className="tc-sub" style={{ color: th.accent }}>{t.subtitle}</div>
+              <div className="tc-loc">{t.location}</div>
+            </div>
+          );
+        })}
+        <div className="arrow" onClick={() => changeTrack(1)}>▶</div>
       </div>
     </div>
   );

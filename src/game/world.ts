@@ -389,7 +389,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
   function placeSide(obj: THREE.Object3D, s: number, lateral: number, yOffset = 0) {
     const p = track.pointAt(s, lateral);
     const psi = track.headingAt(s);
-    obj.position.set(p.x, p.y + yOffset, p.z);
+    obj.position.set(p.x, groundHeight(p.x, p.z) + yOffset, p.z);
     obj.rotation.y = lateral < 0 ? psi - Math.PI / 2 : psi + Math.PI / 2;
     return obj;
   }
@@ -472,7 +472,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
   ];
   for (const gsd of gsDefs) {
     const gsS = gsd.s < 1 ? gsd.s * L : gsd.s;
-    const gsLat = gsd.lateral * (wall + 1.2);
+    const gsLat = gsd.lateral * (wall + 8);
     group.add(placeSide(grandstand(gsd.len, gsd.rows, gsd.seed), gsS, gsLat));
   }
 

@@ -101,6 +101,44 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     envIntensity: 1.1,
     night: false,
   },
+  blizzard: {
+    id: 'blizzard',
+    sunElevation: 8,
+    sunAzimuth: -0.5,
+    sunColor: '#b8c8d8',
+    sunIntensity: 1.8,
+    hemiSky: '#8aa0b8',
+    hemiGround: '#3a4a58',
+    hemiIntensity: 0.65,
+    fog: '#a0b8c8',
+    fogNear: 160,
+    fogFar: 1800,
+    turbidity: 18,
+    rayleigh: 1.5,
+    mieCoefficient: 0.02,
+    mieDirectionalG: 0.85,
+    envIntensity: 0.7,
+    night: false,
+  },
+  volcanic: {
+    id: 'volcanic',
+    sunElevation: 22,
+    sunAzimuth: -0.35,
+    sunColor: '#ff8a40',
+    sunIntensity: 2.8,
+    hemiSky: '#4a3020',
+    hemiGround: '#1a0e08',
+    hemiIntensity: 0.6,
+    fog: '#3a2218',
+    fogNear: 140,
+    fogFar: 1600,
+    turbidity: 22,
+    rayleigh: 1.8,
+    mieCoefficient: 0.025,
+    mieDirectionalG: 0.88,
+    envIntensity: 0.65,
+    night: false,
+  },
 };
 
 export function sunDirection(p: TodPreset) {
@@ -170,7 +208,7 @@ export function Atmosphere({ tod, follow, quality }: { tod: TimeOfDay; follow: (
         {/* 下半球是地面而不是天空，避免车身下部反射出天空显得“飘” */}
         <mesh position={[0, -2, 0]} rotation-x={-Math.PI / 2}>
           <circleGeometry args={[400, 32]} />
-          <meshBasicMaterial color={p.night ? '#07090c' : p.sunElevation < 10 ? '#3a3027' : p.id === 'heatwave' ? '#8b6e4e' : '#3d4435'} />
+          <meshBasicMaterial color={p.night ? '#07090c' : p.sunElevation < 10 ? '#3a3027' : p.id === 'heatwave' ? '#8b6e4e' : p.id === 'blizzard' ? '#8aa0b8' : p.id === 'volcanic' ? '#2a1a10' : '#3d4435'} />
         </mesh>
         {p.night && (
           <>
