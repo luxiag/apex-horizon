@@ -379,11 +379,18 @@ function Seg<T extends string | number>({ value, options, onChange }: { value: T
   );
 }
 
-const BIOME_THEME: Record<string, { accent: string; icon: string; label: string; tod: [TimeOfDay, string][] }> = {
-  coast: { accent: '#1d9ea8', icon: '🌊', label: 'COAST', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚']] },
-  desert: { accent: '#d4871a', icon: '🏜', label: 'DESERT', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['heatwave', '热浪']] },
-  snow: { accent: '#6ec6ff', icon: '❄', label: 'ALPINE', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['blizzard', '暴风雪']] },
-  volcano: { accent: '#d43a1a', icon: '🌋', label: 'VOLCANO', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['volcanic', '火山']] },
+const BIOME_ICON: Record<string, React.ReactElement> = {
+  coast: <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 8Q3 5 6 7Q9 9 11 6" fill="none" stroke="currentColor" strokeWidth="1.4"/><path d="M1 10Q3 7 6 9Q9 11 11 8" fill="none" stroke="currentColor" strokeWidth="1" opacity=".5"/></svg>,
+  desert: <svg width="12" height="12" viewBox="0 0 12 12"><path d="M0 9L3 4L6 9" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M5 9L8 3L11 9" fill="none" stroke="currentColor" strokeWidth="1.2"/><line x1="0" y1="9.5" x2="12" y2="9.5" stroke="currentColor" strokeWidth=".8"/></svg>,
+  snow: <svg width="12" height="12" viewBox="0 0 12 12"><line x1="6" y1="1" x2="6" y2="11" stroke="currentColor" strokeWidth="1.2"/><line x1="1" y1="6" x2="11" y2="6" stroke="currentColor" strokeWidth="1.2"/><line x1="2.5" y1="2.5" x2="9.5" y2="9.5" stroke="currentColor" strokeWidth="1"/><line x1="9.5" y1="2.5" x2="2.5" y2="9.5" stroke="currentColor" strokeWidth="1"/></svg>,
+  volcano: <svg width="12" height="12" viewBox="0 0 12 12"><path d="M1 11L4.5 4L6 2L7.5 4L11 11Z" fill="none" stroke="currentColor" strokeWidth="1.2"/><path d="M4.5 4Q5 2 6 1Q7 2 7.5 4" fill="none" stroke="currentColor" strokeWidth=".9"/></svg>,
+};
+
+const BIOME_THEME: Record<string, { accent: string; icon: React.ReactElement; label: string; tod: [TimeOfDay, string][] }> = {
+  coast: { accent: '#39ff9f', icon: BIOME_ICON.coast, label: 'COAST', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚']] },
+  desert: { accent: '#ffb347', icon: BIOME_ICON.desert, label: 'DESERT', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['heatwave', '热浪']] },
+  snow: { accent: '#7ee8ff', icon: BIOME_ICON.snow, label: 'ALPINE', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['blizzard', '暴风雪']] },
+  volcano: { accent: '#ff6b4a', icon: BIOME_ICON.volcano, label: 'VOLCANO', tod: [['sunset', '黄昏'], ['noon', '正午'], ['night', '夜晚'], ['volcanic', '火山']] },
 };
 
 function MiniTrackMap({ trackId, accent }: { trackId: string; accent: string }) {
@@ -457,7 +464,7 @@ function TrackSelect() {
     return () => window.removeEventListener('keydown', h);
   });
   return (
-    <div className="tracks">
+    <div className="tracks" style={{ '--tc': theme.accent } as React.CSSProperties}>
       <div className="topbar">
         <div className="back" onClick={() => (audio.uiBack(), g.go('menu'))}>
           ◀ <span>ESC 返回</span>
@@ -534,12 +541,12 @@ function TrackSelect() {
               <Seg<TimeOfDay> value={g.timeOfDay} options={theme.tod} onChange={(v) => g.set({ timeOfDay: v })} />
             </div>
           </div>
-          <button className="btn" onClick={start} style={{ background: theme.accent }}>
+          <button className="btn" onClick={start} style={{ '--accent': theme.accent, background: theme.accent, boxShadow: `0 0 30px color-mix(in srgb, ${theme.accent} 40%, transparent)` } as React.CSSProperties}>
             Start Race<small>开始比赛 · Enter</small>
           </button>
         </div>
       </div>
-      <div className="track-carousel">
+      <div className="track-strip" style={{ position: 'relative' }}>
         <div className="arrow" onClick={() => changeTrack(-1)}>◀</div>
         {TRACKS.map((t) => {
           const th = BIOME_THEME[t.biome] ?? BIOME_THEME.coast;
@@ -547,19 +554,15 @@ function TrackSelect() {
           return (
             <div
               key={t.id}
-              className={`track-card ${isActive ? 'on' : ''}`}
-              style={{ '--tc': th.accent } as React.CSSProperties}
+              className={`car-card ${isActive ? 'on' : ''}`}
+              style={{ '--c': th.accent } as React.CSSProperties}
               onClick={() => { audio.uiMove(); g.set({ trackId: t.id }); }}
             >
-              <div className="tc-badge" style={{ background: th.accent, color: '#000' }}>
-                {th.icon} {th.label}
-              </div>
-              <div className="tc-map">
+              <div className="cb" style={{ color: th.accent }}>{th.icon} {th.label}</div>
+              <div className="cm">{t.name}</div>
+              <div className="ct">
                 <MiniTrackMap trackId={t.id} accent={th.accent} />
               </div>
-              <div className="tc-name">{t.name}</div>
-              <div className="tc-sub" style={{ color: th.accent }}>{t.subtitle}</div>
-              <div className="tc-loc">{t.location}</div>
             </div>
           );
         })}

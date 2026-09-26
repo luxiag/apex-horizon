@@ -339,6 +339,64 @@ export const billboardTexture2 = () =>
     return tex(c, false);
   });
 
+export const snowRoadTexture = () =>
+  memo('snowRoad', () => {
+    const W = 512;
+    const H = 1024;
+    const [c, g] = canvas(W, H);
+    const n = makeNoise(256, 6, 33);
+    const img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const nv = n[((y % 256) * 256 + ((x * 2) % 256)) | 0];
+        const grain = Math.random() * 15 - 7;
+        const u = x / W;
+        const edge = (Math.abs(u - 0.5) > 0.4) ? 0.8 : 0;
+        const v = 220 + nv * 25 + grain + edge * 20;
+        const i = (y * W + x) * 4;
+        img.data[i] = v;
+        img.data[i + 1] = v + 2;
+        img.data[i + 2] = v + 8;
+        img.data[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    g.fillStyle = 'rgba(235,240,250,0.5)';
+    for (let i = 0; i < 30; i++) {
+      const x = Math.random() * W;
+      const y = Math.random() * H;
+      const r = 3 + Math.random() * 12;
+      g.beginPath();
+      g.arc(x, y, r, 0, Math.PI * 2);
+      g.fill();
+    }
+    return tex(c);
+  });
+
+export const lavaRoadTexture = () =>
+  memo('lavaRoad', () => {
+    const W = 512;
+    const H = 1024;
+    const [c, g] = canvas(W, H);
+    const n = makeNoise(256, 6, 41);
+    const img = g.createImageData(W, H);
+    for (let y = 0; y < H; y++) {
+      for (let x = 0; x < W; x++) {
+        const nv = n[((y % 256) * 256 + ((x * 2) % 256)) | 0];
+        const crack = (nv > 0.62 && nv < 0.68) ? 1 : 0;
+        const grain = Math.random() * 15 - 7;
+        const v = 40 + nv * 30 + grain;
+        const i = (y * W + x) * 4;
+        img.data[i] = v + crack * 180;
+        img.data[i + 1] = v * 0.4 + crack * 60;
+        img.data[i + 2] = v * 0.2 + crack * 10;
+        img.data[i + 3] = 255;
+      }
+    }
+    g.putImageData(img, 0, 0);
+    return tex(c);
+  });
+
 export const windowsTexture = () =>
   memo('windows', () => {
     const [c, g] = canvas(512, 128);
