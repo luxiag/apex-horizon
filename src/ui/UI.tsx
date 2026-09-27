@@ -556,7 +556,12 @@ function TrackSelect() {
               key={t.id}
               className={`car-card ${isActive ? 'on' : ''}`}
               style={{ '--c': th.accent } as React.CSSProperties}
-              onClick={() => { audio.uiMove(); g.set({ trackId: t.id }); }}
+              onClick={() => {
+                audio.uiMove();
+                const newTheme = BIOME_THEME[t.biome] ?? BIOME_THEME.coast;
+                const validTod = newTheme.tod.some((opt) => opt[0] === g.timeOfDay);
+                g.set({ trackId: t.id, ...(validTod ? {} : { timeOfDay: newTheme.tod[0][0] }) });
+              }}
             >
               <div className="cb" style={{ color: th.accent }}>{th.icon} {th.label}</div>
               <div className="cm">{t.name}</div>

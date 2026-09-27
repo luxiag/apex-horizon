@@ -32,7 +32,7 @@ export interface VegetationDef {
 }
 
 export interface ParticleDef {
-  type: 'dust' | 'snow' | 'ash';
+  type: 'dust' | 'snow' | 'ash' | 'ember';
   color: string;
   count: number;
   size: number;
@@ -51,6 +51,14 @@ export interface LandmarkDef {
   count: number;
   scaleY: number;
   yOffset: number;
+}
+
+export interface VolcanoDef {
+  height: number;
+  baseRadius: number;
+  craterRadius: number;
+  offsetX: number;
+  offsetZ: number;
 }
 
 export interface TrackBiome {
@@ -79,12 +87,13 @@ export interface TrackBiome {
   vegetation: (night: boolean) => VegetationDef;
   cloudCount: number;
   cloudColor: (night: boolean) => string;
-  particles?: ParticleDef[]; // DEPRECATED - do not use
+  particles?: ParticleDef[] | ((tod: string) => ParticleDef[]);
   landmarks?: (night: boolean) => LandmarkDef[];
   roadOverlay?: () => { texture: THREE.Texture; opacity: number; color: string };
   lampColor: string;
   lampEmissive: string;
   lampIntensity: (night: boolean) => number;
+  volcano?: VolcanoDef;
 }
 
 function paint(g: THREE.BufferGeometry, color: string) {
@@ -487,7 +496,16 @@ export const snowBiome: TrackBiome = {
   cloudCount: 32,
   cloudColor: (night) => night ? '#2a3a4a' : '#c8d8e8',
 
-  particles: undefined,
+  particles: (tod: string) => {
+    if (tod === 'blizzard') {
+      return [
+        { type: 'snow', color: '#d0d4d8', count: 15000, size: 1.0, heightMin: 0, heightMax: 25, speed: 16.0, drift: 40.0, opacity: 0.45 },
+      ];
+    }
+    return [
+      { type: 'snow', color: '#ffffff', count: 600, size: 1.2, heightMin: 5, heightMax: 60, speed: 1.5, drift: 2.0, opacity: 0.6 },
+    ];
+  },
 
   landmarks(night): LandmarkDef[] {
     const icefallGeo = (() => {
@@ -643,7 +661,14 @@ export const volcanoBiome: TrackBiome = {
   cloudCount: 18,
   cloudColor: (night) => night ? '#1a0e08' : '#5a4030',
 
-  particles: undefined,
+  particles: (tod: string) => {
+    if (tod === 'volcanic') {
+      return [
+        { type: 'ember', color: '#ff4a10', count: 3000, size: 1.8, heightMin: 0, heightMax: 30, speed: 3.5, drift: 4.0, opacity: 0.65 },
+      ];
+    }
+    return [];
+  },
 
   landmarks(night): LandmarkDef[] {
     const fumaroleGeo = (() => {
@@ -686,6 +711,14 @@ export const volcanoBiome: TrackBiome = {
   lampColor: '#ff3020',
   lampEmissive: '#ff3020',
   lampIntensity: (night) => night ? 5 : 0.4,
+
+  volcano: {
+    height: 280,
+    baseRadius: 220,
+    craterRadius: 35,
+    offsetX: 0,
+    offsetZ: -900,
+  },
 };
 
 const BIOME_MAP: Record<string, TrackBiome> = {

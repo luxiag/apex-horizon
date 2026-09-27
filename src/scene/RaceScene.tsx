@@ -13,6 +13,7 @@ import { audio } from '../game/audio';
 import { Skidmarks, Particles } from '../game/effects';
 import { blobShadowTexture } from '../game/textures';
 import { Atmosphere, TOD } from './Atmosphere';
+import { PostFX } from './PostFX';
 
 const CAMERA_MODES = [
   { name: '追尾视角', dist: 6.4, height: 2.0, look: 1.05, fov: 60 },
@@ -73,7 +74,7 @@ export function RaceScene() {
     [session, preps],
   );
 
-  const world = useMemo(() => buildWorld(track, { night: tod.night, quality: cfg.quality }), [track, tod, cfg.quality]);
+  const world = useMemo(() => buildWorld(track, { night: tod.night, quality: cfg.quality, timeOfDay: cfg.timeOfDay }), [track, tod, cfg.quality, cfg.timeOfDay]);
   const fx = useMemo(
     () => ({
       skid: new Skidmarks(4000),
@@ -443,6 +444,32 @@ export function RaceScene() {
 
     // 夜间大灯
     if (headlight.current) headlight.current.intensity = tod.night ? 400 : 0;
+
+    if (world.biomeParticles.length > 0) {
+      const px = pv.pos.x;
+      const pz = pv.pos.z;
+      const isBlizzard = cfg.timeOfDay === 'blizzard';
+      const isVolcanic = cfg.timeOfDay === 'volcanic';
+      for (const bp of world.biomeParticles) {
+        const mat = bp.points.material as THREE.ShaderMaterial;
+        mat.uniforms.uTime.value = state.clock.elapsedTime;
+        mat.uniforms.uPlayerX.value = px;
+        mat.uniforms.uPlayerZ.value = pz;
+        if (mat.uniforms.uWindX) mat.uniforms.uWindX.value = isBlizzard ? 8.0 : isVolcanic ? 1.5 : 0;
+        if (mat.uniforms.uWindZ) mat.uniforms.uWindZ.value = isBlizzard ? 3.0 : isVolcanic ? 0.8 : 0;
+      }
+    }
+
+    if (world.eruption) {
+      const t = state.clock.elapsedTime;
+      const ep = world.eruption;
+      const pMat = ep.particles.material as THREE.ShaderMaterial;
+      pMat.uniforms.uTime.value = t;
+      const sMat = ep.smoke.material as THREE.ShaderMaterial;
+      sMat.uniforms.uTime.value = t;
+      const bMat = ep.bombs.material as THREE.ShaderMaterial;
+      bMat.uniforms.uTime.value = t;
+    }
   });
 
   const follow = useMemo(() => () => session.player.vehicle.pos, [session]);
@@ -460,6 +487,7 @@ export function RaceScene() {
       <primitive object={fx.sparks.points} />
       <primitive object={fx.flame.points} />
       <spotLight ref={headlight} angle={0.55} penumbra={0.6} distance={120} decay={1.2} intensity={0} color="#fff3e0" />
+      <PostFX mode="race" />
     </>
   );
 }

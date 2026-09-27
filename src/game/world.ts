@@ -32,6 +32,13 @@ export interface BiomeParticleAnim {
   scatterRange: number;
 }
 
+export interface EruptionSystem {
+  particles: THREE.Points;
+  smoke: THREE.Points;
+  bombs: THREE.Points;
+  peak: THREE.Vector3;
+}
+
 export interface World {
   group: THREE.Group;
   startLights: THREE.MeshStandardMaterial[];
@@ -39,10 +46,11 @@ export interface World {
   lampMaterials: THREE.MeshStandardMaterial[];
   groundHeight: (x: number, z: number) => number;
   biomeParticles: BiomeParticleAnim[];
+  eruption: EruptionSystem | null;
   dispose: () => void;
 }
 
-export function buildWorld(track: Track, opts: { night: boolean; quality: 'high' | 'medium' }): World {
+export function buildWorld(track: Track, opts: { night: boolean; quality: 'high' | 'medium'; timeOfDay?: string }): World {
   const group = new THREE.Group();
   group.name = 'world';
   const disposables: { dispose: () => void }[] = [];
@@ -771,8 +779,125 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     }
   }
 
-  // ---- 群系粒子 (disabled) ----
+  // ---- 群系粒子 ----
   const biomeParticles: BiomeParticleAnim[] = [];
+  const particleDefs = typeof biome.particles === 'function' ? biome.particles(opts.timeOfDay ?? 'sunset') : biome.particles;
+  const isBlizzard = opts.timeOfDay === 'blizzard';
+  const isVolcanic = opts.timeOfDay === 'volcanic';
+  if (particleDefs && particleDefs.length > 0) {
+    const rnd = mulberry(777);
+    const scatterR = isBlizzard ? 120 : isVolcanic ? 200 : 300;
+    for (const pd of particleDefs) {
+      const count = pd.count;
+      const positions = new Float32Array(count * 3);
+      const aPhase = new Float32Array(count);
+      for (let i = 0; i < count; i++) {
+        positions[i * 3] = (rnd() * 2 - 1) * scatterR;
+        positions[i * 3 + 1] = pd.heightMin + rnd() * (pd.heightMax - pd.heightMin);
+        positions[i * 3 + 2] = (rnd() * 2 - 1) * scatterR;
+        aPhase[i] = rnd() * 6.28;
+      }
+      const pg = new THREE.BufferGeometry();
+      pg.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      pg.setAttribute('aPhase', new THREE.Float32BufferAttribute(aPhase, 1));
+      const pm = new THREE.ShaderMaterial({
+        uniforms: {
+          uTime: { value: 0 },
+          uSpeed: { value: pd.speed },
+          uDrift: { value: pd.drift },
+          uHMin: { value: pd.heightMin },
+          uHMax: { value: pd.heightMax },
+          uColor: { value: new THREE.Color(pd.color) },
+          uSize: { value: pd.size },
+          uOpacity: { value: pd.opacity },
+          uRange: { value: scatterR },
+          uPlayerX: { value: 0 },
+          uPlayerZ: { value: 0 },
+          uWindX: { value: 0 },
+          uWindZ: { value: 0 },
+          uRising: { value: pd.type === 'ember' ? 1.0 : 0.0 },
+          uGlow: { value: pd.type === 'ember' ? 1.0 : 0.0 },
+        },
+        vertexShader: `
+          attribute float aPhase;
+          uniform float uTime;
+          uniform float uSpeed;
+          uniform float uDrift;
+          uniform float uHMin;
+          uniform float uHMax;
+          uniform float uSize;
+          uniform float uRange;
+          uniform float uPlayerX;
+          uniform float uPlayerZ;
+          varying float vAlpha;
+          uniform float uWindX;
+          uniform float uWindZ;
+          uniform float uRising;
+          varying float vAlpha;
+          varying float vGlow;
+          uniform float uGlow;
+          void main() {
+            vec3 pos = position;
+            float h = uHMax - uHMin;
+            float r2 = uRange * 2.0;
+            float seed = fract(aPhase * 0.1591);
+            float spd = uSpeed * (0.5 + seed * 1.0);
+            float drft = uDrift * (0.3 + fract(aPhase * 0.2917) * 1.4);
+            float t = uTime + aPhase * 6.0;
+            float isBlizzard = step(8.0, uDrift);
+            float fall = mod(t * spd * 0.3, h);
+            pos.y = uRising > 0.5 ? uHMin + fall : uHMax - fall;
+            pos.x += uWindX * mod(t * spd, r2) * isBlizzard + sin(t * 0.6 + aPhase * 3.0) * drft * (1.0 - isBlizzard);
+            pos.z += uWindZ * mod(t * spd * 0.7, r2) * isBlizzard + cos(t * 0.4 + aPhase * 2.0) * drft * 0.7 * (1.0 - isBlizzard);
+            pos.x = uPlayerX + mod(pos.x - uPlayerX + uRange, uRange * 2.0) - uRange;
+            pos.z = uPlayerZ + mod(pos.z - uPlayerZ + uRange, uRange * 2.0) - uRange;
+            vAlpha = smoothstep(uHMin, uHMin + 3.0, pos.y) * smoothstep(uHMax, uHMax - 2.0, pos.y);
+            vGlow = uGlow;
+            vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+            gl_Position = projectionMatrix * mvPos;
+            float dist = -mvPos.z;
+            float sizeVar = 0.6 + seed * 0.8;
+            gl_PointSize = uSize * sizeVar * (200.0 / max(dist, 1.0));
+            gl_PointSize = clamp(gl_PointSize, 1.0, 60.0);
+            float fogFade = 1.0 - smoothstep(40.0, 200.0, dist);
+            vAlpha *= fogFade;
+          }
+        `,
+        fragmentShader: `
+          uniform vec3 uColor;
+          uniform float uOpacity;
+          varying float vAlpha;
+          varying float vGlow;
+          void main() {
+            float d = length(gl_PointCoord - 0.5) * 2.0;
+            if (d > 1.0) discard;
+            float a = (1.0 - d * d) * vAlpha;
+            vec3 col = uColor;
+            if (vGlow > 0.5) {
+              float core = 1.0 - d * d;
+              col = mix(col, vec3(1.0, 0.85, 0.4), core * 0.6);
+            }
+            gl_FragColor = vec4(col, a * uOpacity);
+          }
+        `,
+        transparent: true,
+        depthWrite: false,
+      });
+      const pts = new THREE.Points(keep(pg), pm);
+      pts.name = `particles-${pd.type}`;
+      pts.frustumCulled = false;
+      group.add(pts);
+      biomeParticles.push({
+        points: pts,
+        type: pd.type,
+        speed: pd.speed,
+        drift: pd.drift,
+        heightMin: pd.heightMin,
+        heightMax: pd.heightMax,
+        scatterRange: scatterR,
+      });
+    }
+  }
 
   // ---- 群系地标 ----
   if (biome.landmarks) {
@@ -810,6 +935,554 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     }
   }
 
+  // ---- 火山 + 喷发 ----
+  let eruption: EruptionSystem | null = null;
+  const vDef = biome.volcano;
+  if (vDef) {
+    let cx = 0, cz = 0;
+    for (let i = 0; i < n; i++) {
+      const p = track.pointAt((i / n) * L, 0);
+      cx += p.x; cz += p.z;
+    }
+    cx /= n; cz /= n;
+    const vx = cx + vDef.offsetX;
+    const vz = cz + vDef.offsetZ;
+    const peakY = groundHeight(vx, vz) + vDef.height;
+    const peak = new THREE.Vector3(vx, peakY, vz);
+
+    // 火山体 — 程序化山体，不对称轮廓 + 冲沟 + 熔岩流
+    const h = vDef.height;
+    const br = vDef.baseRadius;
+    const cr = vDef.craterRadius;
+    const segments = 64;
+    const rings = 28;
+
+    const ridgeNoise = (angle: number, hn: number) => {
+      const ridge1 = Math.abs(Math.sin(angle * 3 + 0.7)) * 0.12;
+      const ridge2 = Math.abs(Math.sin(angle * 7 + 2.1)) * 0.04;
+      const gully = -Math.pow(Math.abs(Math.sin(angle * 5 + 1.3)), 8) * 0.15;
+      const fbmVal = fbm(Math.cos(angle) * 3 + 5.3, Math.sin(angle) * 3 + 8.1, 3) * 0.1;
+      return (ridge1 + ridge2 + gully + fbmVal) * (1 - hn * 0.6);
+    };
+
+    const profile = (hn: number) => {
+      return 1 - Math.pow(hn, 0.7);
+    };
+
+    const asymmetry = (angle: number) => {
+      return 1 + Math.sin(angle + 0.5) * 0.2 + Math.cos(angle * 2 + 1.2) * 0.08;
+    };
+
+    // 火山口缺口方向 — 一侧低，熔岩从那里流出
+    const breachAngle = 0.8;
+    const breachWidth = 0.6;
+    const breachDepth = 0.18;
+    const rimJagged = (angle: number) => {
+      const j1 = fbm(Math.cos(angle) * 8 + 1.1, Math.sin(angle) * 8 + 3.7, 3) * 0.08;
+      const j2 = Math.abs(Math.sin(angle * 11 + 0.3)) * 0.04;
+      return j1 + j2;
+    };
+    const breachFactor = (angle: number) => {
+      const d = Math.abs(((angle - breachAngle + Math.PI) % (Math.PI * 2)) - Math.PI);
+      return smoothstep(breachWidth, 0, d);
+    };
+
+    const volcanoVerts: number[] = [];
+    const volcanoCols: number[] = [];
+    const cBase = new THREE.Color(night ? '#1a1008' : '#3a2818');
+    const cMid = new THREE.Color(night ? '#0a0604' : '#2a1a0e');
+    const cUpper = new THREE.Color(night ? '#1a0e06' : '#4a2a14');
+    const cRim = new THREE.Color(night ? '#2a0a04' : '#5a2a10');
+    const cLava = new THREE.Color(night ? '#3a0800' : '#6a2a08');
+    const cInner = new THREE.Color(night ? '#1a0a04' : '#3a1a0a');
+    const cScorch = new THREE.Color(night ? '#0e0604' : '#2a1810');
+    const tmpC = new THREE.Color();
+
+    for (let ring = 0; ring <= rings; ring++) {
+      const hn = ring / rings;
+
+      for (let seg = 0; seg <= segments; seg++) {
+        const angle = (seg / segments) * Math.PI * 2;
+        const rn = ridgeNoise(angle, hn);
+        const asymR = asymmetry(angle);
+        const bf = breachFactor(angle);
+
+        let r: number;
+        let vertY: number;
+
+        if (hn < 0.78) {
+          // 山坡
+          r = profile(hn) * br * asymR * (1 + rn);
+          vertY = hn * h;
+        } else if (hn < 0.86) {
+          // 上部过渡 — 略微内收，形成肩部
+          const t = (hn - 0.78) / 0.08;
+          const shoulderR = profile(0.78) * br * asymR * (1 + rn);
+          const rimR = cr * (1.6 + rimJagged(angle)) * asymR;
+          r = shoulderR * (1 - t) + rimR * t;
+          vertY = hn * h;
+          // 缺口处压低
+          vertY -= bf * breachDepth * h * t;
+        } else if (hn < 0.90) {
+          // 火山口缘 — 锯齿状起伏
+          const t = (hn - 0.86) / 0.04;
+          const rimR = cr * (1.6 + rimJagged(angle)) * asymR;
+          const innerR = cr * (1.0 + fbm(Math.cos(angle) * 6 + 2.2, Math.sin(angle) * 6 + 4.1, 2) * 0.15) * asymR;
+          r = rimR * (1 - t) + innerR * t;
+          vertY = 0.86 * h + (1 - t) * h * 0.05 * (1 + rimJagged(angle) * 3);
+          // 缺口处大幅压低，形成豁口
+          vertY -= bf * breachDepth * h * 1.5;
+          // 缺口处半径扩大
+          r += bf * cr * 0.5;
+        } else if (hn < 0.96) {
+          // 火山口内壁 — 粗糙阶梯状
+          const t = (hn - 0.90) / 0.06;
+          const innerR = cr * (1.0 + fbm(Math.cos(angle) * 6 + 2.2, Math.sin(angle) * 6 + 4.1, 2) * 0.15) * asymR;
+          const floorR = cr * (0.2 + fbm(Math.cos(angle) * 4 + 7.7, Math.sin(angle) * 4 + 1.3, 2) * 0.15) * asymR;
+          // 内壁台阶 — 不均匀收缩
+          const stepNoise = fbm(Math.cos(angle) * 10 + 5.5, t * 3 + 2.2, 2) * 0.2;
+          r = innerR * (1 - t) + floorR * t + stepNoise * cr;
+          // 内壁深度 — 不规则凹陷
+          const wallDepth = 0.90 * h - t * h * 0.1;
+          const wallNoise = fbm(Math.cos(angle) * 5 + 3.3, t * 5 + 1.1, 2) * h * 0.03;
+          vertY = wallDepth + wallNoise;
+          // 缺口方向内壁更浅
+          vertY += bf * h * 0.06 * (1 - t);
+        } else {
+          // 火山口底 — 不平坦，有高低
+          const t = (hn - 0.96) / 0.04;
+          const floorR = cr * (0.2 + fbm(Math.cos(angle) * 4 + 7.7, Math.sin(angle) * 4 + 1.3, 2) * 0.15) * asymR;
+          r = floorR * (1 - t * 0.3);
+          const floorBase = 0.80 * h;
+          const floorNoise = fbm(Math.cos(angle) * 3 + 1.1, Math.sin(angle) * 3 + 6.6, 2) * h * 0.02;
+          vertY = floorBase + floorNoise;
+          // 缺口侧更低，熔岩池偏向
+          vertY -= bf * h * 0.03;
+        }
+
+        r = Math.max(0.1, r);
+        const vx2 = Math.cos(angle) * r;
+        const vz2 = Math.sin(angle) * r;
+        volcanoVerts.push(vx2, vertY, vz2);
+
+        // 上色
+        if (hn < 0.78) {
+          tmpC.copy(cBase);
+          tmpC.lerp(cMid, smoothstep(0.2, 0.5, hn));
+          tmpC.lerp(cUpper, smoothstep(0.5, 0.75, hn));
+          const lavaStreak = fbm(Math.cos(angle) * 2 + 9.1, hn * 5 + 3.3, 2);
+          if (lavaStreak > 0.15 && hn > 0.5) {
+            tmpC.lerp(cLava, smoothstep(0.15, 0.45, lavaStreak) * smoothstep(0.5, 0.85, hn) * 0.7);
+          }
+          const gullyFactor = Math.pow(Math.abs(Math.sin(angle * 5 + 1.3)), 4);
+          if (gullyFactor > 0.3 && hn < 0.7) {
+            tmpC.lerp(cLava, gullyFactor * 0.4 * smoothstep(0.8, 0.3, hn));
+          }
+        } else if (hn < 0.86) {
+          tmpC.copy(cUpper);
+          tmpC.lerp(cRim, smoothstep(0.78, 0.86, hn));
+          const scorch = bf * 0.8;
+          tmpC.lerp(cScorch, scorch);
+        } else if (hn < 0.90) {
+          tmpC.copy(cRim);
+          tmpC.lerp(cInner, 0.3);
+          const rimGlow = rimJagged(angle) * 3;
+          tmpC.lerp(cLava, Math.min(1, rimGlow) * 0.4);
+          tmpC.lerp(cScorch, bf * 0.6);
+        } else if (hn < 0.96) {
+          tmpC.copy(cInner);
+          const lavaPatch = fbm(Math.cos(angle) * 4 + 2.7, Math.sin(angle) * 4 + 5.3, 2);
+          tmpC.lerp(cLava, smoothstep(0.2, 0.5, lavaPatch) * 0.6);
+          // 缺口方向内壁更多熔岩痕迹
+          tmpC.lerp(cLava, bf * 0.3);
+        } else {
+          tmpC.copy(cLava);
+          // 缺口侧更深色（更厚的熔岩）
+          const depth = bf * 0.4;
+          const darkLava = new THREE.Color(night ? '#2a0500' : '#551a04');
+          tmpC.lerp(darkLava, depth);
+        }
+        volcanoCols.push(tmpC.r, tmpC.g, tmpC.b);
+      }
+    }
+
+    const indices: number[] = [];
+    for (let ring = 0; ring < rings; ring++) {
+      for (let seg = 0; seg < segments; seg++) {
+        const a = ring * (segments + 1) + seg;
+        const b = a + 1;
+        const c2 = a + segments + 1;
+        const d = c2 + 1;
+        indices.push(a, c2, b, b, c2, d);
+      }
+    }
+
+    const volcanoGeo = new THREE.BufferGeometry();
+    volcanoGeo.setAttribute('position', new THREE.Float32BufferAttribute(volcanoVerts, 3));
+    volcanoGeo.setAttribute('color', new THREE.Float32BufferAttribute(volcanoCols, 3));
+    volcanoGeo.setIndex(indices);
+    volcanoGeo.computeVertexNormals();
+    const volcanoGeoNI = volcanoGeo.toNonIndexed();
+    volcanoGeo.dispose();
+
+    const volcanoMat = keep(new THREE.MeshStandardMaterial({
+      vertexColors: true,
+      roughness: 0.92,
+      metalness: 0.05,
+    }));
+    const volcanoMesh = new THREE.Mesh(keep(volcanoGeoNI), volcanoMat);
+    volcanoMesh.position.set(vx, groundHeight(vx, vz), vz);
+    volcanoMesh.castShadow = false;
+    group.add(volcanoMesh);
+
+    // 火山口熔岩池
+    const lavaDisc = new THREE.CircleGeometry(cr * 0.5, 24);
+    lavaDisc.rotateX(-Math.PI / 2);
+    lavaDisc.translate(0, h * 0.79, 0);
+    const lavaDiscNI = lavaDisc.toNonIndexed();
+    lavaDisc.dispose();
+    const lavaGlowMat = keep(new THREE.MeshStandardMaterial({
+      color: night ? '#ff2a00' : '#ff4a10',
+      emissive: '#ff2a00',
+      emissiveIntensity: night ? 4 : 1.5,
+      roughness: 0.6,
+    }));
+    const lavaGlowMesh = new THREE.Mesh(keep(lavaDiscNI), lavaGlowMat);
+    lavaGlowMesh.position.set(vx, groundHeight(vx, vz), vz);
+    group.add(lavaGlowMesh);
+
+    // ---- 喷发粒子 ----
+    const eruptCount = 2500;
+    const eruptPos = new Float32Array(eruptCount * 3);
+    const eruptPhase = new Float32Array(eruptCount);
+    const eruptSpeed = new Float32Array(eruptCount);
+    const eruptAngle = new Float32Array(eruptCount);
+    const eruptLife = new Float32Array(eruptCount);
+    const eRnd = mulberry(321);
+    for (let i = 0; i < eruptCount; i++) {
+      eruptPos[i * 3] = 0;
+      eruptPos[i * 3 + 1] = 0;
+      eruptPos[i * 3 + 2] = 0;
+      eruptPhase[i] = eRnd();
+      eruptSpeed[i] = 15 + eRnd() * 25;
+      eruptAngle[i] = eRnd() * Math.PI * 2;
+      eruptLife[i] = 3 + eRnd() * 4;
+    }
+    const eruptGeo = new THREE.BufferGeometry();
+    eruptGeo.setAttribute('position', new THREE.Float32BufferAttribute(eruptPos, 3));
+    eruptGeo.setAttribute('aPhase', new THREE.Float32BufferAttribute(eruptPhase, 1));
+    eruptGeo.setAttribute('aSpeed', new THREE.Float32BufferAttribute(eruptSpeed, 1));
+    eruptGeo.setAttribute('aAngle', new THREE.Float32BufferAttribute(eruptAngle, 1));
+    eruptGeo.setAttribute('aLife', new THREE.Float32BufferAttribute(eruptLife, 1));
+    const eruptMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uOrigin: { value: peak },
+        uGravity: { value: 9.8 },
+        uSize: { value: 2.5 },
+        uOpacity: { value: 0.7 },
+      },
+      vertexShader: `
+        attribute float aPhase;
+        attribute float aSpeed;
+        attribute float aAngle;
+        attribute float aLife;
+        uniform float uTime;
+        uniform vec3 uOrigin;
+        uniform float uGravity;
+        uniform float uSize;
+        varying float vAge;
+        varying float vAlpha;
+        void main() {
+          float t = mod(uTime + aPhase * aLife, aLife);
+          float age = t / aLife;
+          vAge = age;
+          float hSpread = 0.35;
+          vec3 vel = vec3(cos(aAngle) * aSpeed * hSpread, aSpeed, sin(aAngle) * aSpeed * hSpread);
+          vec3 pos = uOrigin + vel * t;
+          pos.y -= uGravity * t * t * 0.5;
+          if (pos.y < uOrigin.y - 5.0) pos.y = uOrigin.y - 5.0;
+          vAlpha = smoothstep(0.0, 0.04, age) * smoothstep(1.0, 0.65, age);
+          vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+          gl_Position = projectionMatrix * mvPos;
+          float dist = -mvPos.z;
+          float sizeVar = 0.5 + aPhase * 1.0;
+          gl_PointSize = uSize * sizeVar * (300.0 / max(dist, 1.0));
+          gl_PointSize = clamp(gl_PointSize, 1.0, 80.0);
+          float fogFade = 1.0 - smoothstep(80.0, 400.0, dist);
+          vAlpha *= fogFade;
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying float vAge;
+        varying float vAlpha;
+        void main() {
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          if (d > 1.0) discard;
+          vec3 hotColor = vec3(1.0, 0.9, 0.4);
+          vec3 warmColor = vec3(1.0, 0.4, 0.05);
+          vec3 coolColor = vec3(0.35, 0.12, 0.05);
+          vec3 darkColor = vec3(0.15, 0.1, 0.08);
+          vec3 col;
+          float a1 = smoothstep(0.0, 0.15, vAge);
+          float a2 = smoothstep(0.15, 0.4, vAge);
+          float a3 = smoothstep(0.4, 1.0, vAge);
+          col = mix(hotColor, warmColor, a1);
+          col = mix(col, coolColor, a2);
+          col = mix(col, darkColor, a3);
+          float core = 1.0 - d * d;
+          col = mix(col, hotColor, core * 0.4 * (1.0 - vAge));
+          float a = (1.0 - d * d) * vAlpha * uOpacity;
+          gl_FragColor = vec4(col, a);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+    });
+    const eruptPts = new THREE.Points(keep(eruptGeo), eruptMat);
+    eruptPts.name = 'eruption-particles';
+    eruptPts.frustumCulled = false;
+    group.add(eruptPts);
+
+    // ---- 浓烟柱（三层：口缘黑烟 + 中层灰烟翻滚 + 高空白云扩散）----
+    const smokeCount = 1200;
+    const smokePos = new Float32Array(smokeCount * 3);
+    const smokePhase = new Float32Array(smokeCount);
+    const smokeSpeed = new Float32Array(smokeCount);
+    const smokeAngle = new Float32Array(smokeCount);
+    const smokeLife = new Float32Array(smokeCount);
+    const smokeLayer = new Float32Array(smokeCount);
+    const sRnd = mulberry(654);
+    for (let i = 0; i < smokeCount; i++) {
+      smokePos[i * 3] = 0;
+      smokePos[i * 3 + 1] = 0;
+      smokePos[i * 3 + 2] = 0;
+      const layer = i < 400 ? 0 : i < 800 ? 1 : 2;
+      smokePhase[i] = sRnd();
+      if (layer === 0) {
+        smokeSpeed[i] = 12 + sRnd() * 10;
+        smokeLife[i] = 3 + sRnd() * 3;
+      } else if (layer === 1) {
+        smokeSpeed[i] = 6 + sRnd() * 6;
+        smokeLife[i] = 5 + sRnd() * 5;
+      } else {
+        smokeSpeed[i] = 3 + sRnd() * 4;
+        smokeLife[i] = 8 + sRnd() * 6;
+      }
+      smokeAngle[i] = sRnd() * Math.PI * 2;
+      smokeLayer[i] = layer;
+    }
+    const smokeGeo = new THREE.BufferGeometry();
+    smokeGeo.setAttribute('position', new THREE.Float32BufferAttribute(smokePos, 3));
+    smokeGeo.setAttribute('aPhase', new THREE.Float32BufferAttribute(smokePhase, 1));
+    smokeGeo.setAttribute('aSpeed', new THREE.Float32BufferAttribute(smokeSpeed, 1));
+    smokeGeo.setAttribute('aAngle', new THREE.Float32BufferAttribute(smokeAngle, 1));
+    smokeGeo.setAttribute('aLife', new THREE.Float32BufferAttribute(smokeLife, 1));
+    smokeGeo.setAttribute('aLayer', new THREE.Float32BufferAttribute(smokeLayer, 1));
+    const smokeOrigin = peak.clone().add(new THREE.Vector3(0, 5, 0));
+    const smokeMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uOrigin: { value: smokeOrigin },
+        uWindX: { value: 2.0 },
+        uWindZ: { value: 1.0 },
+        uSize: { value: 40.0 },
+        uOpacity: { value: 0.55 },
+      },
+      vertexShader: `
+        attribute float aPhase;
+        attribute float aSpeed;
+        attribute float aAngle;
+        attribute float aLife;
+        attribute float aLayer;
+        uniform float uTime;
+        uniform vec3 uOrigin;
+        uniform float uWindX;
+        uniform float uWindZ;
+        uniform float uSize;
+        varying float vAge;
+        varying float vAlpha;
+        varying float vLayer;
+        void main() {
+          float t = mod(uTime + aPhase * aLife, aLife);
+          float age = t / aLife;
+          vAge = age;
+          vLayer = aLayer;
+          vec3 pos = uOrigin;
+          float rise = aSpeed * t;
+          pos.y += rise;
+          float drift = aSpeed * 0.3;
+          float windDrift = uWindX * t * 0.5;
+          if (aLayer < 0.5) {
+            // 层0：口缘黑烟柱 — 紧凑上升，小扩散
+            float spread = 1.0 + age * 1.2;
+            pos.x += cos(aAngle) * drift * t * 0.3 * spread;
+            pos.z += sin(aAngle) * drift * t * 0.3 * spread;
+            pos.x += windDrift * 0.2;
+            pos.z += uWindZ * t * 0.5 * 0.2;
+            vAlpha = smoothstep(0.0, 0.03, age) * smoothstep(1.0, 0.3, age) * 1.0;
+          } else if (aLayer < 1.5) {
+            // 层1：中层灰烟 — 翻滚扩散
+            float expand = 1.0 + age * 3.5;
+            float tumble = sin(t * 2.0 + aPhase * 12.0) * age * 8.0;
+            pos.x += cos(aAngle) * drift * t * expand + tumble * cos(aAngle + 1.57);
+            pos.z += sin(aAngle) * drift * t * expand + tumble * sin(aAngle + 1.57);
+            pos.x += windDrift * 0.6;
+            pos.z += uWindZ * t * 0.5 * 0.6;
+            vAlpha = smoothstep(0.0, 0.08, age) * smoothstep(1.0, 0.45, age) * 0.7;
+          } else {
+            // 层2：高空白云 — 大范围飘散
+            float expand = 1.0 + age * 6.0;
+            float meander = sin(t * 0.8 + aPhase * 8.0) * age * 15.0;
+            pos.x += cos(aAngle) * drift * t * expand * 2.0 + meander;
+            pos.z += sin(aAngle) * drift * t * expand * 2.0 + cos(aPhase * 5.0) * age * 10.0;
+            pos.x += windDrift * 1.2;
+            pos.z += uWindZ * t * 0.5 * 1.2;
+            vAlpha = smoothstep(0.0, 0.12, age) * smoothstep(1.0, 0.5, age) * 0.4;
+          }
+          vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+          gl_Position = projectionMatrix * mvPos;
+          float dist = -mvPos.z;
+          float sizeVar;
+          if (aLayer < 0.5) {
+            sizeVar = 0.8 + aPhase * 0.6;
+          } else if (aLayer < 1.5) {
+            sizeVar = 1.0 + aPhase * 1.2;
+          } else {
+            sizeVar = 1.5 + aPhase * 2.0;
+          }
+          float expandScale = aLayer < 0.5 ? 1.0 + age * 1.5 : aLayer < 1.5 ? 1.0 + age * 3.5 : 1.0 + age * 6.0;
+          gl_PointSize = uSize * sizeVar * expandScale * (300.0 / max(dist, 1.0));
+          gl_PointSize = clamp(gl_PointSize, 2.0, 300.0);
+          float fogFade = 1.0 - smoothstep(120.0, 600.0, dist);
+          vAlpha *= fogFade;
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying float vAge;
+        varying float vAlpha;
+        varying float vLayer;
+        void main() {
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          if (d > 1.0) discard;
+          float soft = 1.0 - d * d;
+          vec3 col;
+          if (vLayer < 0.5) {
+            // 黑烟 — 深灰棕，口缘强烈橙红内发光
+            col = mix(vec3(0.10, 0.06, 0.04), vec3(0.22, 0.14, 0.09), vAge * 0.6);
+            float innerGlow = (1.0 - vAge) * 0.7;
+            col += vec3(0.8, 0.25, 0.03) * innerGlow;
+          } else if (vLayer < 1.5) {
+            // 灰烟翻滚
+            col = mix(vec3(0.18, 0.12, 0.08), vec3(0.35, 0.28, 0.22), vAge * 0.5);
+            col += vec3(0.3, 0.08, 0.02) * (1.0 - vAge) * 0.25;
+          } else {
+            // 高空白云
+            col = mix(vec3(0.30, 0.24, 0.20), vec3(0.50, 0.44, 0.40), vAge * 0.4);
+          }
+          float a = soft * vAlpha * uOpacity;
+          gl_FragColor = vec4(col, a);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+    });
+    const smokePts = new THREE.Points(keep(smokeGeo), smokeMat);
+    smokePts.name = 'eruption-smoke';
+    smokePts.frustumCulled = false;
+    smokePts.renderOrder = -1;
+    group.add(smokePts);
+
+    // ---- 火山弹 ----
+    const bombCount = 25;
+    const bombPos = new Float32Array(bombCount * 3);
+    const bombPhase = new Float32Array(bombCount);
+    const bombSpeed = new Float32Array(bombCount);
+    const bombAngle = new Float32Array(bombCount);
+    const bombLife = new Float32Array(bombCount);
+    const bRnd = mulberry(987);
+    for (let i = 0; i < bombCount; i++) {
+      bombPos[i * 3] = 0;
+      bombPos[i * 3 + 1] = 0;
+      bombPos[i * 3 + 2] = 0;
+      bombPhase[i] = bRnd();
+      bombSpeed[i] = 25 + bRnd() * 20;
+      bombAngle[i] = bRnd() * Math.PI * 2;
+      bombLife[i] = 4 + bRnd() * 3;
+    }
+    const bombGeo = new THREE.BufferGeometry();
+    bombGeo.setAttribute('position', new THREE.Float32BufferAttribute(bombPos, 3));
+    bombGeo.setAttribute('aPhase', new THREE.Float32BufferAttribute(bombPhase, 1));
+    bombGeo.setAttribute('aSpeed', new THREE.Float32BufferAttribute(bombSpeed, 1));
+    bombGeo.setAttribute('aAngle', new THREE.Float32BufferAttribute(bombAngle, 1));
+    bombGeo.setAttribute('aLife', new THREE.Float32BufferAttribute(bombLife, 1));
+    const bombMat = new THREE.ShaderMaterial({
+      uniforms: {
+        uTime: { value: 0 },
+        uOrigin: { value: peak },
+        uGravity: { value: 9.8 },
+        uSize: { value: 8.0 },
+        uOpacity: { value: 0.9 },
+      },
+      vertexShader: `
+        attribute float aPhase;
+        attribute float aSpeed;
+        attribute float aAngle;
+        attribute float aLife;
+        uniform float uTime;
+        uniform vec3 uOrigin;
+        uniform float uGravity;
+        uniform float uSize;
+        varying float vAge;
+        varying float vAlpha;
+        void main() {
+          float t = mod(uTime + aPhase * aLife, aLife);
+          float age = t / aLife;
+          vAge = age;
+          float hSpread = 0.6;
+          vec3 vel = vec3(cos(aAngle) * aSpeed * hSpread, aSpeed * 0.8, sin(aAngle) * aSpeed * hSpread);
+          vec3 pos = uOrigin + vel * t;
+          pos.y -= uGravity * t * t * 0.5;
+          if (pos.y < uOrigin.y - 5.0) pos.y = uOrigin.y - 5.0;
+          vAlpha = smoothstep(0.0, 0.03, age) * smoothstep(1.0, 0.7, age);
+          vec4 mvPos = modelViewMatrix * vec4(pos, 1.0);
+          gl_Position = projectionMatrix * mvPos;
+          float dist = -mvPos.z;
+          gl_PointSize = uSize * (300.0 / max(dist, 1.0));
+          gl_PointSize = clamp(gl_PointSize, 2.0, 100.0);
+          float fogFade = 1.0 - smoothstep(80.0, 400.0, dist);
+          vAlpha *= fogFade;
+        }
+      `,
+      fragmentShader: `
+        uniform float uOpacity;
+        varying float vAge;
+        varying float vAlpha;
+        void main() {
+          float d = length(gl_PointCoord - 0.5) * 2.0;
+          if (d > 1.0) discard;
+          vec3 hotColor = vec3(1.0, 0.85, 0.3);
+          vec3 warmColor = vec3(1.0, 0.35, 0.05);
+          vec3 col = mix(hotColor, warmColor, smoothstep(0.0, 0.5, vAge));
+          float core = 1.0 - d * d;
+          col = mix(col, vec3(1.0, 1.0, 0.8), core * 0.5 * (1.0 - vAge));
+          float a = (1.0 - d * d) * vAlpha * uOpacity;
+          gl_FragColor = vec4(col, a);
+        }
+      `,
+      transparent: true,
+      depthWrite: false,
+    });
+    const bombPts = new THREE.Points(keep(bombGeo), bombMat);
+    bombPts.name = 'volcanic-bombs';
+    bombPts.frustumCulled = false;
+    group.add(bombPts);
+
+    eruption = { particles: eruptPts, smoke: smokePts, bombs: bombPts, peak };
+  }
+
   // ---- 云 ----
   if (!night) {
     const st = smokeTexture();
@@ -834,6 +1507,7 @@ export function buildWorld(track: Track, opts: { night: boolean; quality: 'high'
     lampMaterials,
     groundHeight,
     biomeParticles,
+    eruption,
     dispose: () => disposables.forEach((d) => d.dispose()),
   };
 }
