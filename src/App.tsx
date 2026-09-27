@@ -9,6 +9,7 @@ import { RaceScene } from './scene/RaceScene';
 import { UI } from './ui/UI';
 import { audio } from './game/audio';
 import { hud } from './game/race';
+import { TOD } from './scene/Atmosphere';
 
 CARS.forEach((c) => useGLTF.preload(c.url));
 
@@ -20,7 +21,9 @@ export default function App() {
   const carId = useGame((s) => s.carId);
   const volume = useGame((s) => s.volume);
   const quality = useGame((s) => s.quality);
+  const timeOfDay = useGame((s) => s.timeOfDay);
   const inRace = screen === 'race' || screen === 'results';
+  const exposure = inRace ? TOD[timeOfDay].exposure : 1.0;
 
   useEffect(() => {
     document.documentElement.style.setProperty('--accent', carById(carId).accent);
@@ -33,7 +36,7 @@ export default function App() {
         <Canvas
           shadows={{ type: THREE.PCFShadowMap }}
           dpr={quality === 'high' ? [1, 1.75] : [0.75, 1]}
-          gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
+          gl={{ antialias: false, powerPreference: 'high-performance', stencil: false, toneMappingExposure: exposure }}
           camera={{ fov: 40, near: 0.1, far: 9000, position: [7, 1.6, 7] }}
         >
           <Suspense fallback={null}>{inRace ? <RaceScene key={raceKey} /> : <Showroom />}</Suspense>

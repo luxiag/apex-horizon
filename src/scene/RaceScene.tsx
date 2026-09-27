@@ -98,6 +98,7 @@ export function RaceScene() {
     cam.current.yaw = session.player.vehicle.yaw;
     clearPresses();
     gl.shadowMap.autoUpdate = true;
+    gl.toneMappingExposure = TOD[cfg.timeOfDay].exposure;
     return () => {
       audio.stopEngine();
       world.dispose();

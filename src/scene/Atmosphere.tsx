@@ -88,23 +88,23 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
   },
   heatwave: {
     id: 'heatwave',
-    sunElevation: 72,
-    sunAzimuth: -0.3,
-    sunColor: '#fff0c0',
-    sunIntensity: 4.0,
-    hemiSky: '#f0d8a0',
+    sunElevation: 80,
+    sunAzimuth: -0.15,
+    sunColor: '#ffe080',
+    sunIntensity: 5.0,
+    hemiSky: '#e8c880',
     hemiGround: '#8b6e4e',
-    hemiIntensity: 0.9,
-    fog: '#d4b87a',
-    fogNear: 400,
-    fogFar: 3500,
-    turbidity: 10,
-    rayleigh: 2.0,
-    mieCoefficient: 0.01,
-    mieDirectionalG: 0.85,
-    envIntensity: 0.8,
+    hemiIntensity: 1.2,
+    fog: '#c8a868',
+    fogNear: 200,
+    fogFar: 1800,
+    turbidity: 20,
+    rayleigh: 4.0,
+    mieCoefficient: 0.05,
+    mieDirectionalG: 0.9,
+    envIntensity: 1.0,
     night: false,
-    exposure: 0.35,
+    exposure: 0.55,
   },
   blizzard: {
     id: 'blizzard',
@@ -164,17 +164,18 @@ export function Atmosphere({ tod, follow, quality }: { tod: TimeOfDay; follow: (
   useEffect(() => {
     scene.fog = new THREE.Fog(p.fog, p.fogNear, p.fogFar);
     scene.environmentIntensity = p.envIntensity;
-    gl.toneMappingExposure = p.exposure;
     return () => {
       scene.fog = null;
     };
-  }, [p, scene, gl]);
+  }, [p, scene]);
 
   useEffect(() => {
     if (sun.current) scene.add(sun.current.target);
   }, [scene]);
 
   useFrame(() => {
+    if (gl.toneMapping !== THREE.ACESFilmicToneMapping) gl.toneMapping = THREE.ACESFilmicToneMapping;
+    if (gl.toneMappingExposure !== p.exposure) gl.toneMappingExposure = p.exposure;
     const l = sun.current;
     if (!l) return;
     const f = follow();
