@@ -1,4 +1,5 @@
 import { Suspense, useEffect } from 'react';
+import * as THREE from 'three';
 import { Canvas } from '@react-three/fiber';
 import { useGLTF } from '@react-three/drei';
 import { useGame } from './game/store';
@@ -30,14 +31,10 @@ export default function App() {
     <>
       <div className="stage">
         <Canvas
-          shadows
+          shadows={{ type: THREE.PCFShadowMap }}
           dpr={quality === 'high' ? [1, 1.75] : [0.75, 1]}
-          flat
           gl={{ antialias: false, powerPreference: 'high-performance', stencil: false }}
           camera={{ fov: 40, near: 0.1, far: 9000, position: [7, 1.6, 7] }}
-          onCreated={(s) => {
-            if (import.meta.env.DEV) Object.assign(window, { __r3f: s });
-          }}
         >
           <Suspense fallback={null}>{inRace ? <RaceScene key={raceKey} /> : <Showroom />}</Suspense>
         </Canvas>

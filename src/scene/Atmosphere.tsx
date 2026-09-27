@@ -6,8 +6,8 @@ import type { TimeOfDay } from '../game/store';
 
 export interface TodPreset {
   id: string;
-  sunElevation: number; // 度
-  sunAzimuth: number; // 弧度
+  sunElevation: number;
+  sunAzimuth: number;
   sunColor: string;
   sunIntensity: number;
   hemiSky: string;
@@ -22,6 +22,7 @@ export interface TodPreset {
   mieDirectionalG: number;
   envIntensity: number;
   night: boolean;
+  exposure: number;
 }
 
 export const TOD: Record<TimeOfDay, TodPreset> = {
@@ -41,27 +42,29 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     rayleigh: 3.2,
     mieCoefficient: 0.008,
     mieDirectionalG: 0.95,
-    envIntensity: 1,
+    envIntensity: 0.7,
     night: false,
+    exposure: 0.8,
   },
   noon: {
     id: 'noon',
-    sunElevation: 58,
-    sunAzimuth: -0.4,
-    sunColor: '#fff6ea',
-    sunIntensity: 3.6,
-    hemiSky: '#cfe6ff',
+    sunElevation: 65,
+    sunAzimuth: -0.3,
+    sunColor: '#ffffff',
+    sunIntensity: 4.0,
+    hemiSky: '#8ec8ff',
     hemiGround: '#4d5a39',
     hemiIntensity: 0.9,
-    fog: '#b9d2ea',
-    fogNear: 300,
-    fogFar: 3200,
+    fog: '#a0c4e0',
+    fogNear: 800,
+    fogFar: 6000,
     turbidity: 3,
-    rayleigh: 1.2,
-    mieCoefficient: 0.004,
-    mieDirectionalG: 0.8,
-    envIntensity: 1,
+    rayleigh: 0.5,
+    mieCoefficient: 0.1,
+    mieDirectionalG: 0.95,
+    envIntensity: 0.8,
     night: false,
+    exposure: 0.45,
   },
   night: {
     id: 'night',
@@ -81,25 +84,27 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     mieDirectionalG: 0.8,
     envIntensity: 0.6,
     night: true,
+    exposure: 1.5,
   },
   heatwave: {
     id: 'heatwave',
     sunElevation: 72,
     sunAzimuth: -0.3,
-    sunColor: '#ffe4a0',
-    sunIntensity: 4.2,
+    sunColor: '#fff0c0',
+    sunIntensity: 4.0,
     hemiSky: '#f0d8a0',
     hemiGround: '#8b6e4e',
-    hemiIntensity: 1.0,
+    hemiIntensity: 0.9,
     fog: '#d4b87a',
-    fogNear: 280,
-    fogFar: 2800,
-    turbidity: 15,
+    fogNear: 400,
+    fogFar: 3500,
+    turbidity: 10,
     rayleigh: 2.0,
-    mieCoefficient: 0.015,
-    mieDirectionalG: 0.9,
-    envIntensity: 1.1,
+    mieCoefficient: 0.01,
+    mieDirectionalG: 0.85,
+    envIntensity: 0.8,
     night: false,
+    exposure: 0.35,
   },
   blizzard: {
     id: 'blizzard',
@@ -119,6 +124,7 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     mieDirectionalG: 0.85,
     envIntensity: 0.7,
     night: false,
+    exposure: 0.7,
   },
   volcanic: {
     id: 'volcanic',
@@ -138,6 +144,7 @@ export const TOD: Record<TimeOfDay, TodPreset> = {
     mieDirectionalG: 0.88,
     envIntensity: 0.65,
     night: false,
+    exposure: 0.8,
   },
 };
 
@@ -149,19 +156,19 @@ export function sunDirection(p: TodPreset) {
 export function Atmosphere({ tod, follow, quality }: { tod: TimeOfDay; follow: () => THREE.Vector3; quality: 'high' | 'medium' }) {
   const p = TOD[tod];
   const sun = useRef<THREE.DirectionalLight>(null);
-  const { scene } = useThree();
+  const { scene, gl } = useThree();
   const dir = useMemo(() => sunDirection(p), [p]);
-  // 夜间的“月光”方向与太阳相反的高处
   const lightDir = useMemo(() => (p.night ? new THREE.Vector3(0.4, 0.8, -0.45).normalize() : dir.clone()), [p, dir]);
   const skyPos = useMemo(() => dir.clone().multiplyScalar(1000), [dir]);
 
   useEffect(() => {
     scene.fog = new THREE.Fog(p.fog, p.fogNear, p.fogFar);
     scene.environmentIntensity = p.envIntensity;
+    gl.toneMappingExposure = p.exposure;
     return () => {
       scene.fog = null;
     };
-  }, [p, scene]);
+  }, [p, scene, gl]);
 
   useEffect(() => {
     if (sun.current) scene.add(sun.current.target);

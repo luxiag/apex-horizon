@@ -169,7 +169,9 @@ export const coastBiome: TrackBiome = {
     const broad = (() => {
       const trunk = new THREE.CylinderGeometry(0.2, 0.32, 2.8, 6);
       trunk.translate(0, 1.4, 0);
-      paint(trunk, '#5b4331');
+      const trunkNI = trunk.toNonIndexed();
+      trunk.dispose();
+      paint(trunkNI, '#5b4331');
       const crown = new THREE.IcosahedronGeometry(2.4, 1);
       const p = crown.attributes.position;
       for (let i = 0; i < p.count; i++) {
@@ -180,11 +182,10 @@ export const coastBiome: TrackBiome = {
         p.setXYZ(i, x * f, y * f * 0.85, z * f);
       }
       crown.translate(0, 4.2, 0);
-      const crownNI = crown.toNonIndexed();
-      paint(crownNI, '#4d6e2e');
-      const trunkNI = trunk.toNonIndexed();
-      paint(trunkNI, '#5b4331');
-      const merged = mergeGeometries([trunkNI, crownNI])!;
+      paint(crown, '#4d6e2e');
+      const merged = mergeGeometries([trunkNI, crown])!;
+      trunkNI.dispose();
+      crown.dispose();
       merged.computeVertexNormals();
       return merged;
     })();

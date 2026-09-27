@@ -13,7 +13,6 @@ import { audio } from '../game/audio';
 import { Skidmarks, Particles } from '../game/effects';
 import { blobShadowTexture } from '../game/textures';
 import { Atmosphere, TOD } from './Atmosphere';
-import { PostFX } from './PostFX';
 
 const CAMERA_MODES = [
   { name: '追尾视角', dist: 6.4, height: 2.0, look: 1.05, fov: 60 },
@@ -190,8 +189,13 @@ export function RaceScene() {
       c.lastPhase = session.phase;
     }
     gl.shadowMap.autoUpdate = false;
-    gl.shadowMap.needsUpdate = session.phase === 'racing' && (c.shadowFrame++ % 2 === 0);
+    if (session.phase === 'racing') {
+      gl.shadowMap.needsUpdate = c.shadowFrame++ % 2 === 0;
+    } else {
+      gl.shadowMap.enabled = false;
+    }
     if (session.phase === 'racing' && c.lastPhase !== 'racing') {
+      gl.shadowMap.enabled = true;
       gl.shadowMap.needsUpdate = true;
     }
     if (session.phase === 'finished' && session.phaseTime > 4 && !c.resultsSent) {
@@ -455,7 +459,6 @@ export function RaceScene() {
       <primitive object={fx.sparks.points} />
       <primitive object={fx.flame.points} />
       <spotLight ref={headlight} angle={0.55} penumbra={0.6} distance={120} decay={1.2} intensity={0} color="#fff3e0" />
-      <PostFX mode="race" />
     </>
   );
 }
